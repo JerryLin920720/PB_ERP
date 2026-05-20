@@ -1,0 +1,115 @@
+.classic-sidebar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  bottom: 24px;
+  width: var(--tree-width);
+  background-color: var(--app-bg-sidebar) !important;
+  border-right: 1px solid var(--border-color) !important;
+  border-left: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 50;
+  padding: 16px 8px;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.win32-desktop.collapsed-sidebar .classic-sidebar {
+  left: calc(-1 * var(--tree-width));
+}
+
+.tree-container {
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: var(--border-radius-md);
+  transition: all 0.15s ease;
+  color: var(--text-main);
+}
+
+.tree-node:hover {
+  background-color: #f1f5f9;
+  color: var(--primary-color);
+}
+
+/* 🌟 Modern selection look (Soft Blue active capsule) */
+.tree-node.selected-node {
+  background-color: var(--primary-light) !important;
+  color: var(--primary-color) !important;
+  font-weight: 600;
+}
+
+.tree-node.selected-node .node-text {
+  color: var(--primary-color) !important;
+}
+
+.tree-collapse-btn {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.node-icon {
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+  opacity: 0.9;
+}
+
+.node-text {
+  color: inherit;
+}
+
+.node-text.bold {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.tree-children {
+  margin-left: 12px;
+  border-left: 1px dashed #cbd5e1;
+  padding-left: 4px;
+}
+
+.tree-node.leaf {
+  padding-left: 12px;
+  position: relative;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.leaf-icon {
+  font-size: 13px;
+  margin-right: 6px;
+  opacity: 0.7;
+}
+
+/* Modernized Clean Scrollbar */
+.classic-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+.classic-sidebar::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.classic-sidebar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 3px;
+}
+.classic-sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}

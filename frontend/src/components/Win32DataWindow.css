@@ -1,0 +1,225 @@
+.dw-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: #ffffff;
+  font-family: inherit;
+  border: 1px solid #d9d9d9;
+  overflow: hidden;
+}
+
+/* 1. DataWindow Standard Control Toolbar - Now Flat & Sleek */
+.dw-toolbar {
+  height: 48px;
+  background-color: #fafbfc;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+}
+
+.dw-action-btn {
+  height: 32px;
+  padding: 0 12px;
+  background: var(--app-bg-panel);
+  border: 1px solid #cbd5e1;
+  border-radius: var(--border-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  outline: none;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.dw-action-btn:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: var(--primary-light);
+}
+
+.dw-action-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.dw-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dw-separator {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
+/* 2. Main DataWindow Table viewport - Crisp Edge, Pure White */
+.dw-viewport {
+  flex: 1;
+  background-color: #ffffff; 
+  border: 0 !important;
+  border-radius: 0;
+  margin: 0;
+  overflow: auto;
+  position: relative;
+  box-shadow: none;
+}
+
+.dw-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  user-select: none;
+  background: #ffffff;
+}
+
+/* Header row - Modern Flat Gray */
+.dw-th {
+  height: 30px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #d9d9d9;
+  border-right: 1px solid #d9d9d9;
+  font-weight: 700;
+  font-size: 12px;
+  color: #262626;
+  text-align: left;
+  padding: 4px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Leftmost indicator column for the Current-Row Arrow */
+.dw-indicator-col {
+  width: 28px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #d9d9d9;
+  border-right: 1px solid #d9d9d9;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 11px;
+  color: #096dd9;
+  font-weight: 700;
+}
+
+/* Normal cells */
+.dw-td {
+  height: 28px;
+  border-bottom: 1px solid #f0f0f0;
+  border-right: 1px solid #f0f0f0;
+  font-size: 12px;
+  color: #262626;
+  padding: 4px 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: #ffffff;
+  transition: background-color 0.1s;
+}
+
+.dw-td.dw-td-editing {
+  padding: 2px 4px;
+}
+
+/* Row styles */
+.dw-row {
+  cursor: default;
+}
+
+.dw-row:hover .dw-td {
+  background-color: #f0f5ff;
+}
+
+/* Selected Row Highlighting - Clean Glass Blue */
+.dw-row.selected .dw-td {
+  background-color: #bae7ff !important;
+  color: #262626 !important;
+  font-weight: 600;
+}
+
+/* Active Editing Row Highlighting */
+.dw-row.in-editing .dw-td {
+  background-color: #fff7e6 !important;
+  color: #262626 !important;
+}
+
+
+/* Row targeted for deletion */
+.dw-row.deleted .dw-td {
+  text-decoration: line-through;
+  color: #bfbfbf !important;
+  background-color: #fafafa !important;
+}
+
+/* Inline Cell Editing Input */
+.dw-cell-input {
+  width: 100%;
+  min-width: 140px;
+  height: 32px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--border-radius-sm);
+  padding: 0 8px;
+  margin: 0;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  background-color: #ffffff;
+  color: var(--text-main);
+  box-sizing: border-box;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.dw-cell-input-modern,
+.dw-cell-select-modern {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  height: 24px !important;
+  border: 1px solid #1890ff !important;
+  border-radius: 0 !important;
+  padding: 2px 6px !important;
+  font-size: 12px !important;
+  font-family: inherit !important;
+  color: #262626 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.dw-cell-input-modern:focus,
+.dw-cell-select-modern:focus {
+  outline: 1px solid #1890ff !important;
+}
+
+/* Small arrow indicating current row */
+.pb-row-arrow {
+  color: #096dd9;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+/* Status bar at footer of window - Slick & Informative */
+.dw-statusbar {
+  min-height: 26px !important;
+  height: 26px !important;
+  border-top: 1px solid #d9d9d9 !important;
+  background-color: #fafafa !important;
+  display: flex;
+  align-items: center;
+  padding: 0 10px !important;
+  font-size: 12px;
+  color: #595959 !important;
+  font-weight: 500;
+}
+
+.dw-statusbar span:first-child {
+  color: #8c8c8c;
+}

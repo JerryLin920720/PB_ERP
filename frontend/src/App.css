@@ -1,0 +1,190 @@
+/* Modern Base Desktop Setup */
+.win32-desktop {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-bg-desktop);
+  overflow: hidden;
+  position: relative;
+}
+
+/* The MDI Body region beneath navbar, above statusbar */
+.win32-mdi-body {
+  position: absolute;
+  top: var(--header-height);
+  bottom: 24px; 
+  left: 0;
+  right: 0;
+  display: flex;
+  background-color: var(--app-bg-desktop);
+}
+
+/* MDI Workspace filling the right area with padding and shadow cards */
+.win32-workspace-area {
+  margin-left: var(--tree-width); 
+  flex: 1;
+  height: calc(100% - 24px);
+  background-color: var(--app-bg-desktop);
+  overflow: hidden; 
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.win32-desktop.collapsed-sidebar .win32-workspace-area {
+  margin-left: 0px;
+}
+
+/* 🛰️ 懸浮側欄邊緣切換開關 (The Floating Edge Seam Toggle) */
+.sidebar-edge-toggle {
+  position: absolute;
+  left: calc(var(--tree-width) - 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 56px;
+  background-color: var(--app-bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  z-index: 60;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-muted);
+}
+
+.win32-desktop.collapsed-sidebar .sidebar-edge-toggle {
+  left: 0px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.sidebar-edge-toggle:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* 🏷️ 全新極緻多頁籤列 MDI Tab Strip */
+.mdi-tab-strip {
+  height: 32px;
+  background-color: #e2e8f0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px;
+  gap: 4px;
+  border-bottom: 1px solid #cbd5e1;
+  overflow-x: auto;
+}
+
+.mdi-tab-strip::-webkit-scrollbar {
+  display: none; /* 隱藏橫向捲軸 */
+}
+
+.mdi-tab-item {
+  height: 26px;
+  background-color: #cbd5e1;
+  border: 1px solid #b1bfc9;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  position: relative;
+  top: 1px;
+}
+
+.mdi-tab-item:hover {
+  background-color: #dbeafe;
+  color: var(--primary-color);
+}
+
+.mdi-tab-item.active {
+  height: 27px;
+  background-color: var(--app-bg-panel);
+  color: var(--primary-color);
+  border-color: #94a3b8;
+  border-bottom-color: var(--app-bg-panel);
+  font-weight: 600;
+  z-index: 10;
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.03);
+}
+
+.mdi-tab-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 10px;
+  transition: all 0.1s ease;
+}
+
+.mdi-tab-close-btn:hover {
+  background-color: #f1f5f9;
+  color: #ef4444;
+}
+
+/* 視窗主內容卡片包裝容器 */
+.mdi-sheet-container {
+  flex: 1;
+  padding: 16px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-bg-desktop);
+}
+
+/* Modernized Bottom Status Bar */
+.win32-statusbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background-color: #f8fafc;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 16px;
+  box-sizing: border-box;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  z-index: 100;
+}
+
+.status-panel {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.status-panel.section-left {
+  flex: 1;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.status-panel.section-time {
+  justify-content: center;
+  letter-spacing: 1px;
+  font-family: monospace;
+  font-weight: bold;
+  opacity: 0.8;
+}

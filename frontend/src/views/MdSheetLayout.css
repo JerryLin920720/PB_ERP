@@ -1,0 +1,242 @@
+.md-sheet-container {
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f0f2f5;
+  font-size: 13px;
+}
+
+.md-sheet-header {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 4px 15px;
+  background: #fff;
+  border-bottom: 1px solid #d9d9d9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.md-sheet-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #262626;
+  font-weight: 700;
+}
+
+.md-sheet-version {
+  color: #8c8c8c;
+  font-size: 10px;
+}
+
+.md-sheet-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-sheet-tabs > .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+.md-sheet-tabs > .ant-tabs-content-holder,
+.md-sheet-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.md-sheet-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.md-query-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.md-query-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+}
+
+.md-editor-shell {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: #fff;
+}
+
+.md-editor-sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+  border-right: 1px solid #d9d9d9;
+}
+
+.md-editor-sidebar-header {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  background: #e6f7ff;
+  border-bottom: 1px solid #d9d9d9;
+  color: #002766;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.md-editor-sidebar-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.md-editor-sidebar-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.md-editor-sidebar-item:hover {
+  background: #f0f5ff;
+}
+
+.md-editor-sidebar-item.active {
+  background: #e6f7ff;
+  border-right: 3px solid #1890ff;
+}
+
+.md-editor-sidebar-item-title {
+  color: #262626;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.md-editor-sidebar-item-meta {
+  margin-top: 2px;
+  color: #8c8c8c;
+  font-size: 11px;
+}
+
+.md-editor-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: #fff;
+}
+
+.md-sheet-container .dw-where-panel {
+  background: #fff !important;
+  padding: 8px !important;
+  border: 1px solid #d9d9d9 !important;
+  border-radius: 0 !important;
+  margin-bottom: 8px !important;
+  flex: 0 0 auto;
+}
+
+.md-sheet-container .ant-card {
+  border-radius: 0 !important;
+  border-color: #d9d9d9 !important;
+  box-shadow: none !important;
+}
+
+.md-sheet-container .ant-card-head {
+  min-height: 32px !important;
+  background: #f5faff !important;
+  border-bottom-color: #d9d9d9 !important;
+}
+
+.md-sheet-container .ant-card-head-title {
+  padding: 6px 0 !important;
+}
+
+.md-sheet-container .ant-card-body {
+  padding: 10px 12px !important;
+}
+
+.md-sheet-container .ant-table-thead > tr > th {
+  padding: 6px 8px !important;
+  color: #262626 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  background: #fafafa !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+}
+
+.md-sheet-container .ant-table-tbody > tr > td {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+}
+
+.md-sheet-container .row-active td {
+  background-color: #bae7ff !important;
+}
+
+.md-sheet-container .pb-form .ant-form-item,
+.md-sheet-container .pb-query-form .ant-form-item {
+  margin-bottom: 4px !important;
+}
+
+.md-sheet-container .pb-form .ant-form-item-label,
+.md-sheet-container .pb-query-form .ant-form-item-label {
+  padding: 0 0 2px !important;
+}
+
+.md-sheet-container .pb-form .ant-form-item-label label,
+.md-sheet-container .pb-query-form .ant-form-item-label label {
+  height: 18px !important;
+  color: #595959 !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+}
+
+.md-sheet-container .pb-form .ant-input:not(textarea),
+.md-sheet-container .pb-form .ant-input-number,
+.md-sheet-container .pb-form .ant-select-selector,
+.md-sheet-container .pb-form .ant-picker,
+.md-sheet-container .pb-query-form .ant-input:not(textarea),
+.md-sheet-container .pb-query-form .ant-input-number,
+.md-sheet-container .pb-query-form .ant-select-selector,
+.md-sheet-container .pb-query-form .ant-picker {
+  min-height: 28px !important;
+  border-radius: 0 !important;
+  border-color: #d9d9d9 !important;
+  font-size: 12px !important;
+}
+
+.md-sheet-container .card-title-pb {
+  color: #002766 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+@media (max-width: 900px) {
+  .md-editor-sidebar {
+    width: 160px;
+    flex-basis: 160px;
+  }
+
+  .md-sheet-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

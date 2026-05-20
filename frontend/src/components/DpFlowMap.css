@@ -1,0 +1,131 @@
+/* ------------------ CANVAS & WORKSPACE CONTAINER ------------------ */
+.pb-dp-flow-container {
+  background-color: #c0d6e4 !important; /* Authentic Win32 light sky blue/grey canvas */
+  padding: 30px 20px;
+  width: 100%;
+  min-height: calc(100vh - 120px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.pb-dp-flow-content {
+  position: relative;
+  width: 1000px;
+  height: 650px;
+  background-color: #c0d6e4 !important;
+  flex-shrink: 0;
+}
+
+/* 🎨 Schematic Connector Vector lines overlay */
+.dp-flow-svg-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Let clicks pass through lines */
+  z-index: 1;
+}
+
+/* ------------------ AUTHENTIC WIN32/POWERBUILDER 3D BUTTONS ------------------ */
+.pb-classic-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Microsoft JhengHei";
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0b2240 !important; /* Classic dark blue text */
+  padding: 0 8px;
+  cursor: pointer;
+  background: linear-gradient(to bottom, #ffffff 0%, #e0ecf8 35%, #d1e2f3 100%) !important;
+  
+  /* 🧱 Beveled 3D Classic Border */
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #ffffff #6b8699 #6b8699 #ffffff !important; /* top, right, bottom, left */
+  border-radius: 3px !important;
+  
+  /* 🪟 Soft Retro Drop Shadow */
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.18) !important;
+  transition: all 0.05s ease;
+  z-index: 5;
+  user-select: none;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+/* Hover effect: Subtle light highlight */
+.pb-classic-btn:hover {
+  background: linear-gradient(to bottom, #ffffff 0%, #ebf4fc 35%, #dbe8f5 100%) !important;
+  border-color: #ffffff #5c778a #5c778a #ffffff !important;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Pressed State: Inverse border and translate 1px to simulate realistic physical click */
+.pb-classic-btn:active {
+  border-color: #6b8699 #ffffff #ffffff #6b8699 !important; /* Inverted bevel */
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.15), 1px 1px 1px rgba(0,0,0,0.05) !important;
+  transform: translate(1px, 1px) !important;
+}
+
+/* Sizes & Column specific overrides for beautiful symmetry */
+.btn-row1 {
+  width: 125px;
+}
+
+.btn-row2 {
+  width: 130px;
+}
+
+.btn-col-left {
+  width: 160px;
+  height: 40px;
+}
+
+.btn-col-mid1 {
+  width: 180px;
+  height: 50px;
+  font-size: 13px;
+  border-color: #ffffff #53758f #53758f #ffffff !important;
+}
+
+.btn-col-mid2 {
+  width: 180px;
+  height: 50px;
+  font-size: 13px;
+  border-color: #ffffff #53758f #53758f #ffffff !important;
+}
+
+.btn-col-right {
+  position: absolute;
+  height: 40px;
+  font-size: 12.5px;
+}
+
+/* ------------------ RIGHT COLUMN GREY FRAME BOX ------------------ */
+.pb-classic-frame {
+  position: absolute;
+  background-color: #cbdbe8 !important; /* Soft recessed background within frame */
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #8da2b3 #ffffff #ffffff #8da2b3 !important; /* Inset bevel frame */
+  border-radius: 4px !important;
+  box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.08) !important;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.pb-classic-frame::before {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px; right: -2px; bottom: -2px;
+  border: 1px solid #7c93a4;
+  border-radius: 5px;
+  pointer-events: none;
+}

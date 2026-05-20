@@ -1,0 +1,204 @@
+.win32-header-stack {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 1. Title bar - Now a clean top banner */
+.win32-titlebar {
+  height: 34px;
+  background-color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  color: var(--text-white);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-icon-img {
+  font-size: 16px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+}
+
+.title-text {
+  background: linear-gradient(to right, #ffffff, #cbd5e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.titlebar-actions {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* 2. Menu Bar - Modern clean textual tabs with dropdowns */
+.win32-menubar {
+  height: 28px;
+  background-color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 110; /* 確保下拉選單高於工具列 */
+}
+
+.menu-item-wrapper {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.win32-menubar .menu-item {
+  padding: 3px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.win32-menubar .menu-item:hover,
+.menu-item-wrapper.active .menu-item {
+  background-color: #e2e8f0;
+  color: var(--text-main);
+}
+
+/* 🛸 現代懸浮下拉選單面板 Dropdown Pane */
+.menu-dropdown {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  background-color: var(--app-bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 200;
+  animation: dropdownSlide 0.15s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes dropdownSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.dropdown-row:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.dropdown-row .shortcut {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-left: 24px;
+  font-family: monospace;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 3. Toolbar - Premium glass look */
+.win32-toolbar {
+  height: 48px; /* Compact, modern */
+  background-color: var(--app-bg-panel);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 6px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  height: 36px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  background-color: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+.toolbar-btn.active {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  border-color: rgba(37, 99, 235, 0.1);
+}
+
+.icon-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-label {
+  font-size: 13px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 8px;
+}
+
+.toolbar-btn.danger:hover {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
