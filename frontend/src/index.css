@@ -1,4 +1,7 @@
 @import './styles/variables.css';
+@import './styles/erp-master-detail.css';
+@import './styles/erp-form.css';
+@import './styles/erp-table.css';
 
 * {
   box-sizing: border-box;

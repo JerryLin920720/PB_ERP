@@ -7,10 +7,92 @@ import {
   EditOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
 const API_URL = 'http://localhost:8001/api/dp004/';
+
+// Helper functions for size run generation
+const formatSize = (num) => {
+  const rounded = Math.round(num * 10) / 10;
+  const s = rounded.toString();
+  return s.indexOf('.') === -1 ? s + '.0' : s;
+};
+
+const generateSizeRun = ({ startsize, endsize, maxsize, fullhalf }) => {
+  let start = parseFloat(startsize) || 0;
+  let end = parseFloat(endsize) || 0;
+  let max = parseFloat(maxsize) || 0;
+
+  if (start === 0 && end === 0) return [];
+
+  let sizes = [];
+  const isCombo = fullhalf === '3';
+  const step = fullhalf === '2' ? 0.5 : 1.0;
+
+  const addSizes = (sStart, sEnd) => {
+    let curr = sStart;
+    const limit = sEnd + 0.001; 
+    while (curr <= limit) {
+      if (sizes.length >= 20) break;
+      if (isCombo) {
+        sizes.push(`${formatSize(curr)}&${formatSize(curr + 0.5)}`);
+      } else {
+        sizes.push(formatSize(curr));
+      }
+      curr += (isCombo ? 1.0 : step);
+    }
+  };
+
+  if (max > 0) {
+    addSizes(start, max);
+    if (sizes.length < 20) {
+      let sec2Start = 1.0;
+      if (fullhalf === '1') {
+        const decPart = start - Math.floor(start);
+        sec2Start = 1.0 + decPart;
+      }
+      addSizes(sec2Start, end);
+    }
+  } else {
+    addSizes(start, end);
+  }
+
+  return sizes.slice(0, 20);
+};
+
+const updateMatrixForSizeType = (masterRow, detailRows) => {
+  const { sizetype, startsize, endsize, fullhalf, maxsize } = masterRow;
+  const sizes = generateSizeRun({ startsize, endsize, maxsize, fullhalf });
+
+  const colMap = { '1': 'tszus', '2': 'tszeu', '3': 'tszuk', '4': 'tszjp', '5': 'tszot' };
+  const targetField = colMap[sizetype] || 'tszus';
+
+  const updatedDetails = [];
+
+  for (let i = 0; i < sizes.length; i++) {
+    const existing = detailRows[i];
+    if (existing) {
+      updatedDetails.push({
+        ...existing,
+        [targetField]: sizes[i]
+      });
+    } else {
+      updatedDetails.push({
+        gkey: `temp_auto_${Date.now()}_${i}`,
+        tszus: '',
+        tszeu: '',
+        tszuk: '',
+        tszjp: '',
+        tszot: '',
+        [targetField]: sizes[i]
+      });
+    }
+  }
+
+  return updatedDetails;
+};
 
 export default function Dp004Sheet() {
   const [masterList, setMasterList] = useState([]);
@@ -90,29 +172,7 @@ export default function Dp004Sheet() {
   };
 
   const autoGenerateMatrix = (currentMaster) => {
-    const { sizetype, startsize, endsize, fullhalf, maxsize } = currentMaster;
-    let start = parseFloat(startsize) || 0;
-    let end = parseFloat(endsize) || 0;
-    let step = (fullhalf === '2' || fullhalf === '3') ? 0.5 : 1.0;
-    const isCombo = (fullhalf === '3');
-    
-    if (start === 0 && end === 0) return;
-    const newDetails = [];
-    const colMap = { '1': 'tszus', '2': 'tszeu', '3': 'tszuk', '4': 'tszjp', '5': 'tszot' };
-    const targetField = colMap[sizetype] || 'tszus';
-
-    let curr = start;
-    while (curr <= end) {
-      if (newDetails.length >= 20) break;
-      let val = isCombo ? `${curr}&${curr + 0.5}` : curr.toString();
-      newDetails.push({
-        gkey: `temp_auto_${Date.now()}_${newDetails.length}`,
-        tszus: '', tszeu: '', tszuk: '', tszjp: '', tszot: '',
-        [targetField]: val
-      });
-      curr += (isCombo ? 1.0 : step);
-    }
-    setDetailList(newDetails);
+    setDetailList(prev => updateMatrixForSizeType(currentMaster, prev));
   };
 
   const handleInsertMaster = () => {
@@ -221,53 +281,80 @@ export default function Dp004Sheet() {
   ];
 
   return (
-    <div style={{ padding: '15px', backgroundColor: '#f0f2f5', height: '100vh', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <div style={{ backgroundColor: '#fff', padding: '8px 15px', borderRadius: '4px', border: '1px solid #d9d9d9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Space>
-          <BlockOutlined style={{ color: '#1890ff' }} />
-          <Text strong>DP004 鞋種性別與尺碼定義</Text>
-          <Divider type="vertical" />
-          {isEditing ? (
-            <Tag icon={<EditOutlined />} color="orange">編輯模式 (Editing)</Tag>
-          ) : (
-            <Tag icon={<EyeOutlined />} color="blue">查看模式 (View-Only)</Tag>
-          )}
-        </Space>
-        <Input placeholder="快速過濾性別..." prefix={<SearchOutlined />} style={{ width: 250 }} value={searchText} onChange={e => setSearchText(e.target.value)} />
-      </div>
+    <ERPSheetPage
+      sheetId="dp004"
+      title="DP004 鞋種性別與尺碼定義"
+      breadcrumb={['開發管理', '鞋種性別與尺碼定義']}
+    >
+      <div className="erp-md-page">
+        {/* 上方：性別 / 碼別設定 Grid (Master) */}
+        <div className="erp-md-master-area" style={{ flex: '0 0 240px', height: '240px', marginBottom: '12px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              性別設定 (Master Grid)
+              {isEditing ? (
+                <Tag icon={<EditOutlined />} color="orange" style={{ marginLeft: 8 }}>編輯模式</Tag>
+              ) : (
+                <Tag icon={<EyeOutlined />} color="blue" style={{ marginLeft: 8 }}>查看模式</Tag>
+              )}
+            </span>
+            <div className="erp-md-toolbar-strip">
+              <Input
+                placeholder="快速過濾性別..."
+                prefix={<SearchOutlined />}
+                style={{ width: 180, height: 24 }}
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                size="small"
+              />
+            </div>
+          </div>
+          <div className="erp-md-table">
+            <Table 
+              size="small" 
+              dataSource={displayList} 
+              columns={masterColumns} 
+              rowKey="gkey" 
+              pagination={false} 
+              sticky 
+              bordered 
+              rowClassName={(record) => record.gkey === selectedGkey ? 'row-active' : ''}
+              onRow={r => ({ 
+                  onClick: () => handleRowSelect(r.gkey, masterDataMap[r.gkey]?.sizes), 
+                  onDoubleClick: () => setIsEditing(true)
+              })} 
+            />
+          </div>
+        </div>
 
-      <div style={{ height: '40%', backgroundColor: '#fff', border: '1px solid #d9d9d9', borderRadius: '4px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ backgroundColor: '#fafafa', padding: '5px 15px', borderBottom: '1px solid #f0f0f0' }}><Text strong size="small">性別設定 (Master Grid)</Text></div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Table 
-            size="small" 
-            dataSource={displayList} 
-            columns={masterColumns} 
-            rowKey="gkey" 
-            pagination={false} 
-            sticky 
-            bordered 
-            onRow={r => ({ 
-                onClick: () => handleRowSelect(r.gkey, masterDataMap[r.gkey]?.sizes), 
-                onDoubleClick: () => setIsEditing(true),
-                className: selectedGkey === r.gkey ? 'row-active' : '' 
-            })} 
-          />
+        {/* 下方：尺碼對照矩陣 (Detail) */}
+        <div className="erp-md-detail-area" style={{ flex: 1, marginBottom: '8px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              尺碼對照矩陣 (Detail Matrix)
+              {selectedGkey && <Tag color="blue" style={{ marginLeft: 8 }}>{masterDataMap[selectedGkey]?.gender}</Tag>}
+            </span>
+          </div>
+          <div className="erp-md-table">
+            <Table
+              size="small"
+              dataSource={detailList}
+              columns={detailColumns}
+              rowKey={(r, i) => r.gkey || i}
+              pagination={false}
+              bordered
+              sticky
+            />
+          </div>
+        </div>
+
+        {/* 底部狀態列 */}
+        <div className="erp-md-statusbar">
+          <span>提示：選擇上方性別設定後可編輯下方尺碼矩陣。</span>
+          <span>狀態：讀取完成。共 {displayList.length} 筆性別設定，{detailList.length} 筆尺碼對照。</span>
         </div>
       </div>
-
-      <div style={{ flex: 1, backgroundColor: '#fff', border: '1px solid #d9d9d9', borderRadius: '4px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ backgroundColor: '#fafafa', padding: '5px 15px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between' }}>
-          <Text strong size="small">尺碼對照矩陣 (Detail Matrix)</Text>
-          {selectedGkey && <Tag color="blue">{masterDataMap[selectedGkey]?.gender}</Tag>}
-        </div>
-        <div style={{ flex: 1, overflow: 'auto', padding: '5px' }}>
-          <Table size="small" dataSource={detailList} columns={detailColumns} rowKey={(r, i) => r.gkey || i} pagination={false} bordered sticky />
-        </div>
-      </div>
-
-      <style>{`.row-active td { background-color: #e6f7ff !important; border-bottom: 2px solid #1890ff !important; } .ant-table-thead > tr > th { background-color: #fafafa !important; font-weight: bold !important; } .ant-table-cell { padding: 4px 8px !important; }`}</style>
-    </div>
+    </ERPSheetPage>
   );
 }
 

@@ -1,0 +1,31 @@
+/* ERPLookup.css - 字典開窗相關元件樣式表 */
+
+.erp-lookup-input {
+  cursor: pointer;
+  background-color: #ffffff;
+}
+
+.erp-lookup-input.ant-input-disabled {
+  cursor: not-allowed !important;
+  background-color: #f5f5f5 !important;
+}
+
+.erp-lookup-icon {
+  cursor: pointer;
+  color: #bfbfbf;
+}
+
+.erp-lookup-input.ant-input-disabled + .ant-input-suffix .erp-lookup-icon,
+.ant-input-disabled .erp-lookup-icon {
+  cursor: not-allowed !important;
+  color: #d9d9d9 !important;
+}
+
+/* Modal 內容與搜尋框間距配置 */
+.erp-lookup-modal .ant-modal-body {
+  padding: 12px 24px !important;
+}
+
+.erp-lookup-search-input {
+  margin-bottom: 12px !important;
+}

@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Divider, Space, Tag, Typography } from 'antd';
-import { BlockOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import Win32DataWindow from '../components/Win32DataWindow';
-import './MdSheetLayout.css';
+import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 
 const API_URL = 'http://localhost:8001/api/';
 
@@ -12,7 +10,6 @@ const API_URL = 'http://localhost:8001/api/';
  * 物理對齊: w_dp023.srw / d_dp023.srd
  */
 export default function Dp023Sheet() {
-  const { Text } = Typography;
   const [lookups, setLookups] = useState({
     lasts: [],
     outsoles: [],
@@ -71,31 +68,18 @@ export default function Dp023Sheet() {
   ];
 
   return (
-    <div className="dp023-premium-container md-sheet-container">
-      <div className="md-sheet-header">
-        <Space>
-          <BlockOutlined style={{ color: '#096dd9' }} />
-          <span className="md-sheet-title">DP023 組別基本資料管理</span>
-          <Divider type="vertical" />
-          <Tag color="blue">VIEWING</Tag>
-        </Space>
-        <span className="md-sheet-version">PB Master-Detail Parity v3.2</span>
-      </div>
-      <div className="md-query-panel">
-        <div className="dw-where-panel">
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            使用上方工具列執行查詢、編輯、增行、刪行與儲存。
-          </Text>
-        </div>
-        <div className="md-query-grid">
-          <Win32DataWindow 
-            sheetId="dp023"
-            title="DP023 組別基本資料管理"
-            apiUrl={`${API_URL}dp023/`}
-            columns={columns}
-          />
-        </div>
-      </div>
-    </div>
+    <ERPSheetPage 
+      sheetId="dp023" 
+      title="組別基本資料管理" 
+      breadcrumb="開發部門管理 > 組別基本資料管理"
+    >
+      <Win32DataWindow 
+        sheetId="dp023"
+        title="DP023 組別基本資料管理"
+        apiUrl={`${API_URL}dp023/`}
+        columns={columns}
+      />
+    </ERPSheetPage>
   );
 }
+

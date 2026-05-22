@@ -3,6 +3,7 @@ import { Table, Button, Input, InputNumber, Space, message, Switch, DatePicker }
 import { PlusOutlined, DeleteOutlined, SaveOutlined, ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 
 const API_BASE_URL = 'http://localhost:8001/api/';
 
@@ -359,82 +360,86 @@ export default function Ba060Sheet() {
   ];
 
   return (
-    <div className="modern-sheet-container">
-      
-      {/* 左側：幣別主檔 (Master) */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #d9d9d9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontWeight: 600 }}>
-            🌍 全域幣別設定
-            {isEditing && <span style={{ fontSize: '12.5px', color: '#52c41a', marginLeft: '8px' }}>(✏️ 編輯中)</span>}
-          </h3>
-          <span style={{ color: '#8c8c8c', fontSize: '12px' }}>💡 雙擊表格行解除鎖定</span>
+    <ERPSheetPage
+      sheetId="ba060"
+      title="BA060 全域幣別與匯率設定"
+      breadcrumb={['基本資料', '全域幣別設定']}
+    >
+      <div className="erp-md-page">
+        {/* 上方：全域幣別設定 (Master) */}
+        <div className="erp-md-master-area" style={{ flex: '0 0 240px', height: '240px', marginBottom: '12px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              🌍 全域幣別設定
+              {isEditing && <span style={{ fontSize: '11px', color: '#52c41a', marginLeft: '8px' }}>(✏️ 編輯中)</span>}
+            </span>
+            <span style={{ color: '#8c8c8c', fontSize: '11px' }}>💡 雙擊表格行解除鎖定</span>
+          </div>
+          <div className="erp-md-table">
+            <Table
+              columns={masterColumns}
+              dataSource={currencies}
+              rowKey="gkey"
+              loading={loadingLeft}
+              pagination={false}
+              size="small"
+              rowClassName={(record) => record.gkey === selectedCurrency?.gkey ? 'row-active' : ''}
+              onRow={(record) => ({
+                onClick: () => handleCurrencySelect(record),
+                onDoubleClick: () => setIsEditing(true)
+              })}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Table
-            columns={masterColumns}
-            dataSource={currencies}
-            rowKey="gkey"
-            loading={loadingLeft}
-            pagination={false}
-            size="small"
-            rowClassName={(record) => record.gkey === selectedCurrency?.gkey ? 'ant-table-row-selected' : ''}
-            onRow={(record) => ({
-              onClick: () => handleCurrencySelect(record),
-              onDoubleClick: () => setIsEditing(true)
-            })}
-          />
-        </div>
-      </div>
 
-      {/* 右側：匯率明細檔 (Detail) */}
-      <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #d9d9d9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontWeight: 600 }}>
-            📅 歷史匯率明細: {selectedCurrency ? `${selectedCurrency.currencyno || '新幣別'} (${selectedCurrency.currency || ''})` : '未選擇'}
-          </h3>
-          <Space>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddRate}
-              disabled={!selectedCurrency}
+        {/* 下方：歷史匯率明細 (Detail) */}
+        <div className="erp-md-detail-area" style={{ flex: 1, marginBottom: '8px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              📅 歷史匯率明細: {selectedCurrency ? `${selectedCurrency.currencyno || '新幣別'} (${selectedCurrency.currency || ''})` : '未選擇'}
+            </span>
+            <div className="erp-md-toolbar-strip">
+              <Button
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={handleAddRate}
+                disabled={!selectedCurrency}
+                size="small"
+              >
+                新增匯率
+              </Button>
+              <Button
+                type="dashed"
+                icon={<SaveOutlined />}
+                onClick={saveRates}
+                disabled={!selectedCurrency}
+                size="small"
+              >
+                儲存明細
+              </Button>
+            </div>
+          </div>
+          <div className="erp-md-table">
+            <Table
+              columns={detailColumns}
+              dataSource={rates}
+              rowKey="gkey"
+              loading={loadingRight}
+              pagination={false}
               size="small"
-            >
-              新增匯率
-            </Button>
-            <Button
-              type="primary"
-              style={{ backgroundColor: '#52c41a' }}
-              icon={<SaveOutlined />}
-              onClick={saveRates}
-              disabled={!selectedCurrency}
-              size="small"
-            >
-              儲存明細
-            </Button>
-          </Space>
+              onRow={(record) => ({
+                onDoubleClick: () => setIsEditing(true)
+              })}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Table
-            columns={detailColumns}
-            dataSource={rates}
-            rowKey="gkey"
-            loading={loadingRight}
-            pagination={false}
-            size="small"
-            onRow={(record) => ({
-              onDoubleClick: () => setIsEditing(true)
-            })}
-          />
+
+        {/* 底部狀態列 */}
+        <div className="erp-md-statusbar">
+          <span>提示：選擇上方幣別後可查看下方歷史匯率；按最上方【編輯】或【雙擊】進行修改</span>
+          <span>狀態：讀取完成。共 {currencies.length} 筆幣別，{rates.length} 筆匯率紀錄。</span>
         </div>
       </div>
-      
-      <style>{`
-        .ant-table-row-selected td {
-          background-color: #e6f7ff !important;
-        }
-      `}</style>
-    </div>
+    </ERPSheetPage>
   );
 }

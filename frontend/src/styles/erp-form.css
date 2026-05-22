@@ -1,0 +1,69 @@
+/* ERP 統一緊湊型表單樣式表 (erp-form.css) */
+
+.erp-form {
+  box-sizing: border-box;
+}
+
+/* 子區塊標題 */
+.erp-form-section-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #1890ff;
+  border-left: 3px solid #1890ff;
+  padding-left: 8px;
+  margin: 8px 0 12px 0;
+  line-height: 1.2;
+}
+
+/* 覆寫 Ant Design 表單間距為 Compact 緊湊排版 */
+.erp-form .ant-form-item {
+  margin-bottom: 6px !important;
+}
+
+.erp-form .ant-form-item-label {
+  padding: 0 0 2px 0 !important;
+  line-height: 18px !important;
+}
+
+.erp-form .ant-form-item-label > label {
+  font-size: 12px !important;
+  color: #595959 !important;
+  height: 18px !important;
+}
+
+/* 統一高度為 28px (Ant Design compact 模式微調) */
+.erp-form .ant-input,
+.erp-form .ant-input-number,
+.erp-form .ant-select-selector,
+.erp-form .ant-picker,
+.erp-form .ant-input-affix-wrapper {
+  height: 28px !important;
+  line-height: 26px !important;
+  font-size: 12px !important;
+  border-radius: 0px !important; /* 硬朗的直角風格 */
+  padding: 0 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* Select 元件內文字置中 */
+.erp-form .ant-select-single .ant-select-selector .ant-select-selection-item,
+.erp-form .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
+  line-height: 26px !important;
+  font-size: 12px !important;
+}
+
+/* Select 右側箭頭位置 */
+.erp-form .ant-select-arrow {
+  right: 8px !important;
+}
+
+/* InputNumber 右側微調按鈕 */
+.erp-form .ant-input-number-handler-wrap {
+  width: 16px !important;
+}
+
+.erp-form .ant-input-number-input {
+  height: 26px !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+}

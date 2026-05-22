@@ -3,6 +3,7 @@ import { Table, Button, Select, InputNumber, Space, message, Switch, DatePicker 
 import { PlusOutlined, DeleteOutlined, SaveOutlined, ReloadOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 
 const API_BASE_URL = 'http://localhost:8001/api/';
 
@@ -350,75 +351,82 @@ export default function Ba061Sheet() {
   };
 
   return (
-    <div className="modern-sheet-container">
-      
-      {/* 左側：交叉主檔 (Master) */}
-      <div style={{ flex: 1.3, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #d9d9d9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontWeight: 600 }}>📊 財務交叉匯率主表 (AB230)</h3>
-          <span style={{ color: '#8c8c8c', fontSize: '12px' }}>💡 頂部主控</span>
+    <ERPSheetPage
+      sheetId="ba061"
+      title="BA061 交叉匯率對與歷程設定"
+      breadcrumb={['基本資料', '交叉匯率設定']}
+    >
+      <div className="erp-md-page">
+        
+        {/* 上方：交叉主檔 (Master) */}
+        <div className="erp-md-master-area" style={{ flex: '0 0 240px', height: '240px', marginBottom: '12px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              📊 財務交叉匯率主表 (AB230)
+            </span>
+            <span style={{ color: '#8c8c8c', fontSize: '11px' }}>💡 頂部主控</span>
+          </div>
+          <div className="erp-md-table">
+            <Table
+              columns={masterColumns}
+              dataSource={pairs}
+              rowKey="gkey"
+              loading={loadingLeft}
+              pagination={false}
+              size="small"
+              rowClassName={(record) => record.gkey === selectedPair?.gkey ? 'row-active' : ''}
+              onRow={(record) => ({
+                onClick: () => handlePairSelect(record)
+              })}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Table
-            columns={masterColumns}
-            dataSource={pairs}
-            rowKey="gkey"
-            loading={loadingLeft}
-            pagination={false}
-            size="small"
-            rowClassName={(record) => record.gkey === selectedPair?.gkey ? 'ant-table-row-selected' : ''}
-            onRow={(record) => ({
-              onClick: () => handlePairSelect(record)
-            })}
-          />
-        </div>
-      </div>
 
-      {/* 右側：交叉歷史明細 (Detail) */}
-      <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #d9d9d9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontWeight: 600 }}>
-            📅 匯率變動歷程: {getPairTitle()}
-          </h3>
-          <Space>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddDetail}
-              disabled={!selectedPair}
+        {/* 下方：交叉歷史明細 (Detail) */}
+        <div className="erp-md-detail-area" style={{ flex: 1, marginBottom: '8px' }}>
+          <div className="erp-md-section-header">
+            <span className="erp-md-section-title">
+              📅 匯率變動歷程: {getPairTitle()}
+            </span>
+            <div className="erp-md-toolbar-strip">
+              <Button
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={handleAddDetail}
+                disabled={!selectedPair}
+                size="small"
+              >
+                新增匯率
+              </Button>
+              <Button
+                type="dashed"
+                icon={<SaveOutlined />}
+                onClick={saveDetails}
+                disabled={!selectedPair}
+                size="small"
+              >
+                儲存明細
+              </Button>
+            </div>
+          </div>
+          <div className="erp-md-table">
+            <Table
+              columns={detailColumns}
+              dataSource={details}
+              rowKey="gkey"
+              loading={loadingRight}
+              pagination={false}
               size="small"
-            >
-              新增匯率
-            </Button>
-            <Button
-              type="primary"
-              style={{ backgroundColor: '#52c41a' }}
-              icon={<SaveOutlined />}
-              onClick={saveDetails}
-              disabled={!selectedPair}
-              size="small"
-            >
-              儲存明細
-            </Button>
-          </Space>
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Table
-            columns={detailColumns}
-            dataSource={details}
-            rowKey="gkey"
-            loading={loadingRight}
-            pagination={false}
-            size="small"
-          />
+
+        {/* 底部狀態列 */}
+        <div className="erp-md-statusbar">
+          <span>提示：選擇上方匯率對後可查看下方歷史匯率；按上方【編輯】或【雙擊】進行修改。</span>
+          <span>狀態：讀取完成。共 {pairs.length} 筆匯率對，{details.length} 筆歷史紀錄。</span>
         </div>
       </div>
-      
-      <style>{`
-        .ant-table-row-selected td {
-          background-color: #e6f7ff !important;
-        }
-      `}</style>
-    </div>
+    </ERPSheetPage>
   );
 }

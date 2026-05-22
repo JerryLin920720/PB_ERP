@@ -1,5 +1,6 @@
 import React from 'react';
 import Win32DataWindow from '../components/Win32DataWindow';
+import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 
 export default function Ba001Sheet() {
   // 1. 定義 ba001 欄位配置對象
@@ -13,45 +14,19 @@ export default function Ba001Sheet() {
   const apiUrl = 'http://localhost:8001/api/ba001/';
 
   return (
-    <div className="modern-sheet-container">
-      {/* 現代化頁面標題 (SaaS Style Page Header) - 取代舊式 Windows 窗體列 */}
-      <div className="sheet-modern-header" style={{
-        height: '52px',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 20px',
-        backgroundColor: '#fafbfc'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '18px' }}>📋</span>
-          <h2 style={{ 
-            margin: 0, 
-            fontSize: '16px', 
-            fontWeight: '600', 
-            color: 'var(--text-main)',
-            letterSpacing: '0.5px'
-          }}>
-            個人片語字庫設定 <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '14px', marginLeft: '6px' }}>[ba001]</span>
-          </h2>
-        </div>
-        
-        {/* 工具標籤或麵包屑 */}
-        <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', fontWeight: '500' }}>
-          基本資料管理 &gt; 個人片語
-        </div>
-      </div>
-
-      {/* 主體嵌入優質 DataWindow 引擎 */}
-      <div style={{ flex: 1, position: 'relative' }}>
-        <Win32DataWindow 
-          columns={columns}
-          apiUrl={apiUrl}
-          title="ba001--個人片語字庫設定"
-          sheetId="ba001"
-        />
-      </div>
-    </div>
+    <ERPSheetPage 
+      sheetId="ba001" 
+      title="個人片語字庫設定" 
+      breadcrumb={['基本資料管理', '個人片語']}
+      mode="view"
+    >
+      <Win32DataWindow 
+        columns={columns}
+        apiUrl={apiUrl}
+        title="ba001--個人片語字庫設定"
+        sheetId="ba001"
+      />
+    </ERPSheetPage>
   );
 }
+

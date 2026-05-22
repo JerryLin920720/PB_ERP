@@ -1,0 +1,119 @@
+/* ERP 全域標準頁面佈局與頁頭樣式 */
+
+.erp-sheet-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--win32-face, #f0f0f0);
+  overflow: hidden;
+  padding: 10px 12px 12px 12px;
+}
+
+/* 頁頭區塊 */
+.erp-sheet-header {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  padding: 4px 6px;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-bottom: 2px solid #b0b0b0;
+  box-sizing: border-box;
+}
+
+/* 麵包屑導航 */
+.erp-sheet-breadcrumb {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-bottom: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 標題包裝區 */
+.erp-sheet-title-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 元數據組合 */
+.erp-sheet-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 作業代號 */
+.erp-sheet-id {
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  font-size: 13px;
+  color: #1890ff;
+  background-color: #e6f7ff;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px dashed #91d5ff;
+}
+
+/* 作業名稱 */
+.erp-sheet-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #262626;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 狀態模式標籤 */
+.erp-sheet-mode-tag {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+/* 唯讀模式樣式 */
+.erp-sheet-mode-tag.erp-sheet-mode-view {
+  color: #8c8c8c;
+  background-color: #fafafa;
+  border-color: #d9d9d9;
+}
+
+/* 新增模式樣式 */
+.erp-sheet-mode-tag.erp-sheet-mode-create {
+  color: #52c41a;
+  background-color: #f6ffed;
+  border-color: #b7eb8f;
+  animation: pulse-green 2s infinite;
+}
+
+/* 編輯模式樣式 */
+.erp-sheet-mode-tag.erp-sheet-mode-edit {
+  color: #faad14;
+  background-color: #fffbe6;
+  border-color: #ffe58f;
+}
+
+/* 內容主體區 */
+.erp-sheet-body {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 狀態動畫，提示新增狀態 */
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(82, 196, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+  }
+}

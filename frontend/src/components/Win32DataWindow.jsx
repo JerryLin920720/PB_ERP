@@ -1,6 +1,192 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { message, Modal } from 'antd';
 import './Win32DataWindow.css';
+
+/**
+ * Helper to construct detail resource URL
+ */
+const buildDetailUrl = (baseUrl, gkey) => {
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}${gkey}/`;
+};
+
+const getDeleteDisplayText = (row, columns = []) => {
+  if (!row) return '';
+
+  const preferredFields = [
+    'serialno',
+    'code',
+    'customerno',
+    'custno',
+    'factoryno',
+    'factno',
+    'bottomno',
+    'lastno',
+    'description',
+    'name',
+    'cname',
+    'shortname',
+    'fullname',
+    'f2type'
+  ];
+
+  const parts = [];
+
+  for (const field of preferredFields) {
+    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+      parts.push(`${field}: ${row[field]}`);
+    }
+    if (parts.length >= 3) break;
+  }
+
+  if (parts.length > 0) {
+    return parts.join('，');
+  }
+
+  // 若 preferredFields 找不到，再從 columns 中找可顯示欄位
+  for (const col of columns) {
+    const key = col.key || col.dataIndex;
+    const label = col.label || col.title || key;
+    if (key && row[key] !== undefined && row[key] !== null && row[key] !== '') {
+      parts.push(`${label}: ${row[key]}`);
+    }
+    if (parts.length >= 3) break;
+  }
+
+  if (parts.length > 0) {
+    return parts.join('，');
+  }
+
+  // gkey 只能當最後 fallback
+  return row.gkey ? `資料主鍵：${row.gkey}` : '此筆資料';
+};
+
+const formatBackendError = (errorData, columns = []) => {
+  // Build field label map
+  const labelMap = {};
+  columns.forEach(col => {
+    const key = col.key || col.dataIndex;
+    const label = col.label || col.title || key;
+    if (key) {
+      labelMap[key] = label;
+    }
+  });
+
+  // Map English validation messages to Chinese
+  const translateMessage = (msg) => {
+    if (!msg) return '';
+    const cleanMsg = msg.trim().toLowerCase();
+    if (cleanMsg.includes('may not be blank') || cleanMsg.includes('this field is required') || cleanMsg.includes('may not be null')) {
+      return '此欄位為必填，不可留空。';
+    }
+    if (cleanMsg.includes('unique') || cleanMsg.includes('already exists') || cleanMsg.includes('must make a unique set')) {
+      return '此欄位值已存在，不可重複。';
+    }
+    if (cleanMsg.includes('not a valid choice')) {
+      return '無效的選項值。';
+    }
+    if (cleanMsg.includes('ensure this value has at most')) {
+      const match = msg.match(/\d+/);
+      return `字元長度超出限制${match ? `（最大長度 ${match[0]} 字元）` : ''}。`;
+    }
+    if (cleanMsg.includes('max_length') || cleanMsg.includes('too long') || cleanMsg.includes('exceeds')) {
+      return '長度超出限制。';
+    }
+    return msg;
+  };
+
+  if (!errorData) return '未知錯誤';
+
+  let errorObj = null;
+
+  if (typeof errorData === 'object') {
+    errorObj = errorData;
+  } else if (typeof errorData === 'string') {
+    try {
+      const dictPattern = /['"]([^'"]+)['"]:\s*\[(?:ErrorDetail\(string=['"]([^'"]+)['"],\s*code=['"][^'"]+['"]\)|['"]([^'"]+)['"])[^\]]*\]/g;
+      let match;
+      const parsed = {};
+      while ((match = dictPattern.exec(errorData)) !== null) {
+        const field = match[1];
+        const msg = match[2] || match[3];
+        if (field && msg) {
+          if (!parsed[field]) parsed[field] = [];
+          parsed[field].push(msg);
+        }
+      }
+
+      if (Object.keys(parsed).length === 0) {
+        const simplePattern = /['"]([^'"]+)['"]:\s*\[\s*['"]([^'"]+)['"]\s*\]/g;
+        while ((match = simplePattern.exec(errorData)) !== null) {
+          const field = match[1];
+          const msg = match[2];
+          if (field && msg) {
+            parsed[field] = [msg];
+          }
+        }
+      }
+
+      if (Object.keys(parsed).length > 0) {
+        errorObj = parsed;
+      } else {
+        const singleDetailPattern = /ErrorDetail\(string=['"]([^'"]+)['"].*?\)/g;
+        const messages = [];
+        while ((match = singleDetailPattern.exec(errorData)) !== null) {
+          messages.push(translateMessage(match[1]));
+        }
+        if (messages.length > 0) {
+          return messages.join('；');
+        }
+        return errorData;
+      }
+    } catch (e) {
+      return errorData;
+    }
+  }
+
+  if (errorObj) {
+    if (errorObj.detail && typeof errorObj.detail === 'string') {
+      if (errorObj.detail.startsWith('{') && errorObj.detail.endsWith('}')) {
+        return formatBackendError(errorObj.detail, columns);
+      }
+      return translateMessage(errorObj.detail);
+    }
+
+    const messages = [];
+    for (const [field, val] of Object.entries(errorObj)) {
+      if (field === 'success' || field === 'non_field_errors') continue;
+      
+      const label = labelMap[field] || field;
+      let msgText = '';
+      if (Array.isArray(val)) {
+        msgText = val.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            return translateMessage(item.string || JSON.stringify(item));
+          }
+          return translateMessage(String(item));
+        }).join('；');
+      } else if (typeof val === 'string') {
+        msgText = translateMessage(val);
+      } else {
+        msgText = JSON.stringify(val);
+      }
+      messages.push(`【${label}】: ${msgText}`);
+    }
+
+    if (messages.length > 0) {
+      return messages.join('\n');
+    }
+  }
+
+  return String(errorData);
+};
+
+const getOptionLabel = (col, value) => {
+  if (value === undefined || value === null) return '';
+  const option = col.options?.find(opt => String(opt.value) === String(value));
+  return option ? option.label : value;
+};
 
 /**
  * Win32DataWindow: 100% 物理與功能性復刻 PB DataWindow (全域頂部工具列專用版)
@@ -79,36 +265,112 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
 
   // ❌ 刪除 (Delete Row)
   const handleDelete = () => {
-    setSelectedRowIndex(currIndex => {
-      if (currIndex < 0) return currIndex;
+    if (selectedRowIndex < 0 || selectedRowIndex >= rows.length) {
+      message.warning('請先選擇要刪除的資料。');
+      return;
+    }
+    
+    const selectedRow = rows[selectedRowIndex];
+    if (!selectedRow) {
+      message.warning('請先選擇要刪除的資料。');
+      return;
+    }
+
+    const gkey = selectedRow.gkey;
+    if (!gkey) {
+      message.error('此筆資料缺少 gkey，無法刪除。');
+      return;
+    }
+
+    // 若選到的是 temp_ 開頭的新資料，直接從前端 rows 移除，不需要打 API。
+    if (typeof gkey === 'string' && gkey.startsWith('temp_')) {
+      const remaining = rows.filter(row => row.gkey !== gkey);
+      const hasSerialNo = columns.some(col => col.key === 'serialno');
       
-      setRows(prevRows => {
-        if (currIndex >= prevRows.length) return prevRows;
-        const rowToDelete = prevRows[currIndex];
-        const key = rowToDelete.gkey;
-
-        if (!key.startsWith('temp_')) {
-          setDeleteSet(prevSet => {
-            const nextSet = new Set(prevSet);
-            nextSet.add(key);
-            return nextSet;
-          });
-        }
-
-        setDirtyMap(prevDirty => {
-          const nextDirty = { ...prevDirty };
-          delete nextDirty[key];
-          return nextDirty;
+      let finalRows = remaining;
+      let nextDirty = { ...dirtyMap };
+      delete nextDirty[gkey];
+      
+      if (hasSerialNo) {
+        finalRows = remaining.map((row, idx) => {
+          const newSn = idx + 1;
+          if (row.serialno !== '(自動)' && Number(row.serialno) !== newSn) {
+            const updatedRow = { ...row, serialno: newSn };
+            nextDirty[row.gkey] = updatedRow;
+            return updatedRow;
+          }
+          return row;
         });
+      }
+      
+      setRows(finalRows);
+      setDirtyMap(nextDirty);
+      setSelectedRowIndex(prev => (prev === 0 ? 0 : prev - 1));
+      setStatusMsg('已移除未儲存的新資料列。');
+      return;
+    }
 
-        return prevRows.filter((_, i) => i !== currIndex);
-      });
-
-      setStatusMsg('標記刪除成功，請點擊頂部「儲存」按鈕存檔。');
-      // 自動計算新選擇位置
-      return currIndex === 0 ? 0 : currIndex - 1;
+    // 若選到的是資料庫既有資料：
+    Modal.confirm({
+      title: '確定要刪除此筆資料嗎？',
+      content: `識別資料: ${getDeleteDisplayText(selectedRow, columns)}`,
+      okText: '確定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          setStatusMsg('正在從伺服器刪除資料...');
+          const deleteUrl = buildDetailUrl(apiUrl, gkey);
+          await axios.delete(deleteUrl);
+          
+          // 重新排序並儲存剩餘的資料列
+          const remainingRows = rows.filter(row => row.gkey !== gkey);
+          const hasSerialNo = columns.some(col => col.key === 'serialno');
+          const upsertList = [];
+          
+          remainingRows.forEach((row, idx) => {
+            const newSn = idx + 1;
+            const isDirty = !!dirtyMap[row.gkey];
+            const snChanged = row.serialno !== '(自動)' && Number(row.serialno) !== newSn;
+            
+            if (isDirty || snChanged) {
+              const baseRow = dirtyMap[row.gkey] || row;
+              upsertList.push({
+                ...baseRow,
+                serialno: row.serialno === '(自動)' ? '(自動)' : newSn
+              });
+            }
+          });
+          
+          // 如果沒有 serialno 欄位，但有其他欄位在 dirtyMap 中，也一起儲存以防 fetchRows 刷新丟失
+          if (!hasSerialNo) {
+            const remainingDirty = Object.values(dirtyMap).filter(item => item.gkey !== gkey);
+            if (remainingDirty.length > 0) {
+              upsertList.push(...remainingDirty);
+            }
+          }
+          
+          if (upsertList.length > 0) {
+            const bulkApiUrl = apiUrl.endsWith('/') ? `${apiUrl}bulk_save/` : `${apiUrl}/bulk_save/`;
+            await axios.post(bulkApiUrl, {
+              upsert: upsertList,
+              delete: []
+            });
+          }
+          
+          message.success('刪除成功');
+          await fetchRows();
+        } catch (err) {
+          const errorMsg = formatBackendError(err.response?.data || err.message, columns);
+          message.error(`刪除失敗:\n${errorMsg}`);
+          setStatusMsg(`刪除失敗: ${errorMsg}`);
+        } finally {
+          setLoading(false);
+        }
+      }
     });
   };
+
 
   // 💾 儲存 (Save)
   const handleSave = async () => {
@@ -148,7 +410,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
         throw new Error(res.data.detail || '存檔失敗');
       }
     } catch (err) {
-      setStatusMsg(`存檔失敗: ${err.response?.data?.detail || err.message}`);
+      const errorMsg = formatBackendError(err.response?.data || err.message, columns);
+      message.error(`存檔失敗:\n${errorMsg}`);
+      setStatusMsg(`存檔失敗: ${errorMsg}`);
       setLoading(false);
     }
   };
@@ -265,7 +529,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
                           <span style={{ opacity: isDeleted ? 0.4 : 1 }}>
                             {col.displayKey && row[col.displayKey] !== undefined && row[col.displayKey] !== null
                               ? String(row[col.displayKey])
-                              : (row[col.key] === undefined || row[col.key] === null ? '' : String(row[col.key]))}
+                              : (col.options 
+                                  ? getOptionLabel(col, row[col.key]) 
+                                  : (row[col.key] === undefined || row[col.key] === null ? '' : String(row[col.key])))}
                           </span>
                         )}
                       </td>

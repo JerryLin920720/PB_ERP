@@ -1,0 +1,320 @@
+/* ERP 統一主從佈局與元件樣式表 (erp-master-detail.css) */
+
+/* 1. 檢索條件面板 (dw_where Panel) */
+.erp-query-panel {
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+/* 2. 檢索列表網格容器 */
+.erp-query-grid {
+  flex: 1 1 auto;
+  overflow: auto;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  box-sizing: border-box;
+}
+
+/* 3. 編輯器主外殼 (整合 Master + Detail) */
+.erp-editor-shell {
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+  box-sizing: border-box;
+  gap: 8px;
+}
+
+/* 4. 編輯器側邊欄 (如左側快速鍵清單) */
+.erp-editor-sidebar {
+  flex: 0 0 250px;
+  border: 1px solid #d9d9d9;
+  background-color: #ffffff;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* 5. 編輯器主表單區 (Master 卡片) */
+.erp-editor-main {
+  flex: 1 1 auto;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  padding: 12px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 6. 子明細區塊容器 */
+.erp-detail-panel {
+  flex: 1 1 auto;
+  border: 1px solid #d9d9d9;
+  background-color: #ffffff;
+  margin-top: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 7. 子明細分頁標籤 */
+.erp-detail-tabs {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 覆寫 Antd Tabs 緊湊樣式，減少空隙 */
+.erp-detail-tabs .ant-tabs-nav {
+  margin-bottom: 0px !important;
+  background-color: #fafafa !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+}
+
+.erp-detail-tabs .ant-tabs-tab {
+  padding: 6px 16px !important;
+  font-size: 12px !important;
+  margin: 0 !important;
+}
+
+.erp-detail-tabs .ant-tabs-content-holder {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-detail-tabs .ant-tabs-tabpane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 8. .erp-editor-shell 範圍內緊湊 12px ERP 風格與 Ant Design 覆寫 */
+.erp-editor-shell,
+.erp-editor-shell * {
+  font-size: 12px !important;
+}
+
+/* Ant Design 表單標籤與輸入控制項字體與高度調整 */
+.erp-editor-shell .ant-form-item-label > label {
+  font-size: 12px !important;
+  height: 24px !important;
+  line-height: 24px !important;
+}
+
+.erp-editor-shell .ant-input,
+.erp-editor-shell .ant-input-number,
+.erp-editor-shell .ant-input-number-input,
+.erp-editor-shell .ant-select,
+.erp-editor-shell .ant-select-selector,
+.erp-editor-shell .ant-select-selection-item,
+.erp-editor-shell .ant-select-selection-placeholder {
+  font-size: 12px !important;
+  height: 24px !important;
+  line-height: 24px !important;
+}
+
+.erp-editor-shell .ant-select-selector {
+  padding: 0 8px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Ant Design 表格字體與緊湊 Padding 覆寫 */
+.erp-editor-shell .ant-table {
+  font-size: 12px !important;
+}
+
+.erp-editor-shell .ant-table-thead > tr > th {
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  height: 28px !important;
+  background-color: #fafafa !important;
+  font-weight: 700 !important;
+  color: #262626 !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+  border-right: 1px solid #d9d9d9 !important;
+}
+
+.erp-editor-shell .ant-table-tbody > tr > td {
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  height: 28px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  border-right: 1px solid #f0f0f0 !important;
+}
+
+.erp-editor-shell .ant-table-cell {
+  padding: 4px 6px !important;
+}
+
+.erp-editor-shell .ant-typography {
+  font-size: 12px !important;
+}
+
+/* 列選取標記樣式 */
+.erp-editor-shell .row-active td {
+  background-color: #e6f7ff !important;
+  border-bottom: 2px solid #1890ff !important;
+}
+
+/* ==========================================================================
+   Pattern B / Master-Detail Layout Styles
+   ========================================================================== */
+
+.erp-md-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.erp-md-page,
+.erp-md-page * {
+  font-size: 12px !important;
+}
+
+/* Split layout for side-by-side grids (B1) */
+.erp-md-split-layout {
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+  box-sizing: border-box;
+  gap: 15px;
+  width: 100%;
+  margin-bottom: 8px; /* Leave space for status bar */
+}
+
+/* Master area (Left Panel in B1) */
+.erp-md-master-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Detail area (Right Panel in B1) */
+.erp-md-detail-area {
+  flex: 1.5;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Section Header inside Panels */
+.erp-md-section-header {
+  height: 36px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 15px;
+  flex: 0 0 auto;
+}
+
+/* Section Title */
+.erp-md-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #262626;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Table container/viewport wrapper */
+.erp-md-table {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  background-color: #ffffff;
+}
+
+/* Toolbar strip for panel actions */
+.erp-md-toolbar-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status Bar at page bottom */
+.erp-md-statusbar {
+  min-height: 26px !important;
+  height: 26px !important;
+  border-top: 1px solid #d9d9d9 !important;
+  background-color: #fafafa !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px !important;
+  font-size: 12px;
+  color: #595959 !important;
+  font-weight: 500;
+  flex-shrink: 0;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+}
+
+/* Ant Design Table adjustments inside erp-md-page */
+.erp-md-page .ant-table-thead > tr > th {
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  height: 28px !important;
+  background-color: #fafafa !important;
+  font-weight: 700 !important;
+  color: #262626 !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+  border-right: 1px solid #d9d9d9 !important;
+}
+
+.erp-md-page .ant-table-tbody > tr > td {
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  height: 28px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  border-right: 1px solid #f0f0f0 !important;
+}
+
+.erp-md-page .ant-table-cell {
+  padding: 4px 6px !important;
+}
+
+/* Row selection highlighting in Pattern B */
+.erp-md-page .row-active td {
+  background-color: #e6f7ff !important;
+  border-bottom: 2px solid #1890ff !important;
+}
+
+/* Input/Select styling inside erp-md-page */
+.erp-md-page .ant-input,
+.erp-md-page .ant-input-number,
+.erp-md-page .ant-input-number-input,
+.erp-md-page .ant-select,
+.erp-md-page .ant-select-selector,
+.erp-md-page .ant-select-selection-item,
+.erp-md-page .ant-select-selection-placeholder {
+  font-size: 12px !important;
+  height: 24px !important;
+  line-height: 24px !important;
+}
+
+.erp-md-page .ant-select-selector {
+  padding: 0 8px !important;
+  display: flex !important;
+  align-items: center !important;
+}
