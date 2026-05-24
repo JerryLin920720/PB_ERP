@@ -177,8 +177,8 @@ class Ba009(models.Model):
 class Ba020(models.Model):
     """材料與供應商類別設定 ba020"""
     gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
-    type = models.CharField(max_length=1, db_column='type')
-    code = models.CharField(max_length=2, db_column='code')
+    type = models.CharField(max_length=20, db_column='type')
+    code = models.CharField(max_length=20, db_column='code')
     category = models.CharField(max_length=50, unique=True, db_column='category')
 
     class Meta:

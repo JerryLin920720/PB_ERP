@@ -109,7 +109,7 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
             self.queryset.model._meta.get_field('serialno')
             return self.queryset.order_by('serialno')
         except Exception:
-            return self.queryset
+            return self.queryset.all()
 
     @action(detail=False, methods=['post'], url_path='bulk_save')
     def bulk_save(self, request):
