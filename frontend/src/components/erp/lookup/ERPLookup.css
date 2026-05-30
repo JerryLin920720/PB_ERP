@@ -1,5 +1,12 @@
 /* ERPLookup.css - 字典開窗相關元件樣式表 */
 
+/* Wrapper ensures full-width inline-block behavior for the lookup field */
+.erp-lookup-wrapper {
+  display: inline-block;
+  width: 100%;
+  position: relative;
+}
+
 .erp-lookup-input {
   cursor: pointer;
   background-color: #ffffff;

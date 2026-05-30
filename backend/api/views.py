@@ -14,7 +14,8 @@ from .models import (
     Dp011, Dp012, Dp013, Dp014, Dp023,
     Dp025, Dp026, Dp027, Dp028,
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
-    Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101
+    Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
+    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031
 )
 from .serializers import (
     Ab230Serializer, Ab231Serializer,
@@ -32,7 +33,8 @@ from .serializers import (
     Dp030Serializer, Dp031Serializer, Dp032Serializer, Dp033Serializer, Dp034Serializer, Dp035Serializer, Dp104Serializer,
     Dp040Serializer, Dp041Serializer, Dp042Serializer, Dp043Serializer,
     Dp080Serializer, Dp081Serializer, Dp082Serializer,
-    Dp100Serializer, Dp101Serializer
+    Dp100Serializer, Dp101Serializer,
+    PhraseSerializer, Mr002Serializer, Mr015Serializer, Mr016Serializer, Mr020Serializer, Mr025Serializer, Mr030Serializer, Mr031Serializer
 )
 
 @api_view(['GET'])
@@ -1479,16 +1481,27 @@ class Dp030ViewSet(BaseDictionaryViewSet):
         try:
             with transaction.atomic():
                 # 1. Save Master Dp030
+                # 1. Save Master Dp030
                 m_gkey = master_data.get('gkey')
-                is_new_master = False
-                if m_gkey and str(m_gkey).startswith('temp_'):
+                is_new_master = (not m_gkey) or str(m_gkey).startswith('temp_')
+
+                if is_new_master:
                     master_data.pop('gkey', None)
-                    is_new_master = True
                     serializer = Dp030Serializer(data=master_data)
                     serializer.is_valid(raise_exception=True)
                     master_instance = serializer.save()
                 else:
-                    master_instance = Dp030.objects.get(gkey=m_gkey)
+                    try:
+                        master_instance = Dp030.objects.select_for_update().get(gkey=m_gkey)
+                    except Dp030.DoesNotExist:
+                        return Response(
+                            {
+                                "success": False,
+                                "detail": "找不到要儲存的樣品主檔，可能已被刪除，請重新查詢後再操作。"
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
                     serializer = Dp030Serializer(master_instance, data=master_data, partial=True)
                     serializer.is_valid(raise_exception=True)
                     master_instance = serializer.save()
@@ -1578,6 +1591,267 @@ class Dp031ViewSet(BaseDictionaryViewSet):
             qs = qs.filter(dp030gkey=dp030gkey)
         return qs.order_by('serialno')
 
+    @action(detail=False, methods=['get'], url_path='dp050_query')
+    def dp050_query(self, request):
+        """
+        回傳 DP050 上方配色 Grid 資料
+        """
+        # NOTE: dp031.mdes101gkey / dp031.editdate / dp031.remark do NOT exist
+        # in the actual PostgreSQL database (migrations not run for those fields).
+        # select_related('mdes101gkey') causes UndefinedColumn → 500. Removed.
+        qs = Dp031.objects.select_related(
+            'dp030gkey',
+            'dp030gkey__ba010gkey',
+            'dp030gkey__ba015gkey',
+            'dp030gkey__ba055gkey',
+            'dp030gkey__dp002gkey',
+            'dp030gkey__dp023gkey',
+            'dp030gkey__dp010gkey',
+            'dp030gkey__dp015gkey',
+            'dp030gkey__dp020gkey',
+        )
+
+        # 🔎 篩選條件
+        issuedate_start = request.query_params.get('issuedate_start')
+        issuedate_end = request.query_params.get('issuedate_end')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+        dp002gkey = request.query_params.get('dp002gkey')
+        sampleno = request.query_params.get('sampleno')
+        stock = request.query_params.get('stock')
+        stylename = request.query_params.get('stylename')
+        ba010gkey = request.query_params.get('ba010gkey') or request.query_params.get('cust_no')
+        ba015gkey = request.query_params.get('ba015gkey') or request.query_params.get('fact_no')
+        group_name = request.query_params.get('group_name')
+        maker_name = request.query_params.get('maker_name')
+        styleno = request.query_params.get('styleno')
+        color = request.query_params.get('color')
+        
+        lastno = request.query_params.get('lastno')
+        bottomno = request.query_params.get('bottomno')
+        heelno = request.query_params.get('heelno')
+
+        # 進行條件過濾
+        if issuedate_start:
+            qs = qs.filter(dp030gkey__issuedate__gte=issuedate_start)
+        if issuedate_end:
+            qs = qs.filter(dp030gkey__issuedate__lte=issuedate_end)
+        if year:
+            qs = qs.filter(dp030gkey__year=year)
+        if ba055gkey:
+            qs = qs.filter(dp030gkey__ba055gkey=ba055gkey)
+        if dp002gkey:
+            qs = qs.filter(dp030gkey__dp002gkey=dp002gkey)
+        if sampleno:
+            qs = qs.filter(dp030gkey__sampleno__icontains=sampleno)
+        if stock:
+            qs = qs.filter(dp030gkey__stock__icontains=stock)
+        if stylename:
+            qs = qs.filter(dp030gkey__stylename__icontains=stylename)
+        if ba010gkey:
+            qs = qs.filter(dp030gkey__ba010gkey=ba010gkey)
+        if ba015gkey:
+            qs = qs.filter(dp030gkey__ba015gkey=ba015gkey)
+        if group_name:
+            qs = qs.filter(dp030gkey__dp023gkey__groupname__icontains=group_name)
+        if maker_name:
+            qs = qs.filter(dp030gkey__es101gkey__englishname__icontains=maker_name)
+        if styleno:
+            qs = qs.filter(styleno__icontains=styleno)
+        if color:
+            qs = qs.filter(color__icontains=color)
+            
+        if lastno:
+            qs = qs.filter(dp030gkey__dp010gkey__lastno__icontains=lastno)
+        if bottomno:
+            qs = qs.filter(dp030gkey__dp015gkey__bottomno__icontains=bottomno)
+        if heelno:
+            qs = qs.filter(dp030gkey__dp020gkey__heelno__icontains=heelno)
+
+        # 狀態篩選邏輯
+        status_all = request.query_params.get('status_all') == 'true'
+        status_list_param = request.query_params.get('status_list')
+        
+        if status_all:
+            pass # 包含所有狀態
+        elif status_list_param:
+            status_list = [s.strip() for s in status_list_param.split(',') if s.strip()]
+            qs = qs.filter(status__in=status_list)
+        else:
+            # 預設過濾：1, 2, 3，不包含 0
+            qs = qs.filter(status__in=['1', '2', '3'])
+
+        # 限制筆數
+        try:
+            limit = int(request.query_params.get('limit', 500))
+            if limit < 1:
+                limit = 500
+            elif limit > 2000:
+                limit = 2000
+        except ValueError:
+            limit = 500
+
+        qs = qs.order_by('dp030gkey__dp002gkey', 'dp030gkey__sampleno', 'styleno', 'color')[:limit]
+
+        # 序列化輸出
+        res = []
+        for row in qs:
+            dp030 = row.dp030gkey
+            res.append({
+                "gkey": row.gkey,
+                "dp031gkey": row.gkey,
+                "dp030gkey": dp030.gkey if dp030 else "",
+                "sampleno": dp030.sampleno if dp030 else "",
+                "sampletype": dp030.dp002gkey.sampletype if dp030 and dp030.dp002gkey else "",
+                "issuedate": dp030.issuedate if dp030 else None,
+                "year": dp030.year if dp030 else "",
+                "styleno": row.styleno or "",
+                "stylename": dp030.stylename if dp030 else "",
+                "stock": dp030.stock if dp030 else "",
+                "customer": dp030.ba010gkey.shortname if dp030 and dp030.ba010gkey else "",
+                "ba010gkey": dp030.ba010gkey.gkey if dp030 and dp030.ba010gkey else "",
+                "factory": dp030.ba015gkey.shortname if dp030 and dp030.ba015gkey else "",
+                "ba015gkey": dp030.ba015gkey.gkey if dp030 and dp030.ba015gkey else "",
+                "season": dp030.ba055gkey.groupcode if dp030 and dp030.ba055gkey else "",
+                "ba055gkey": dp030.ba055gkey.gkey if dp030 and dp030.ba055gkey else "",
+                "groupname": dp030.dp023gkey.groupname if dp030 and dp030.dp023gkey else "",
+                "maker_name": dp030.es101gkey.englishname if dp030 and dp030.es101gkey else "",
+                "color": row.color or "",
+                "ecolor": row.ecolor or "",
+                "upper": row.upper or "",
+                "status": row.status,
+                # remark / mdes101gkey / editdate columns not in DB — omit safely
+                "remark": "",
+                "modify_name": "",
+                "editdate": None,
+                "photopath": row.photopath or "",
+                "image_url": f"/media/{row.photopath}" if row.photopath else ""
+            })
+        return Response(res)
+
+    @action(detail=False, methods=['post'], url_path='batch_save')
+    def batch_save(self, request):
+        """
+        🧪 [DP050 樣品單狀態審核批次保存]:
+        Updates multiple Dp031 (status, remark) and Dp033 (receive, finishpairs) records.
+        """
+        dp031_updates = request.data.get('dp031_updates', [])
+        dp033_updates = request.data.get('dp033_updates', [])
+
+        from decimal import Decimal
+        from django.core.exceptions import ObjectDoesNotExist
+
+        affected_dp030_keys = set()
+        affected_dp031_keys = set()
+        affected_dp033_keys = set()
+
+        try:
+            with transaction.atomic():
+                # 1. 鎖定並更新 dp033 (尺碼明細)
+                for item in dp033_updates:
+                    gkey = item.get('gkey')
+                    if not gkey:
+                        continue
+                    try:
+                        d33 = Dp033.objects.select_for_update().get(pk=gkey)
+                    except Dp033.DoesNotExist:
+                        return Response({"detail": "找不到對應的尺碼資料，可能已被刪除，請重新查詢後再操作。"}, status=status.HTTP_400_BAD_REQUEST)
+
+                    # thisreceive 處理與限制
+                    thisreceive_val = item.get('thisreceive')
+                    if thisreceive_val is not None:
+                        try:
+                            thisreceive = Decimal(str(thisreceive_val))
+                        except Exception:
+                            return Response({"detail": "本次點收數格式不正確。"}, status=status.HTTP_400_BAD_REQUEST)
+                        if thisreceive < 0:
+                            return Response({"detail": "本次點收數不可為負數。"}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        old_receive = d33.receive or Decimal('0.0')
+                        new_receive = old_receive + thisreceive
+                        d33.receive = new_receive
+
+                    # finishpairs 處理與限制
+                    finishpairs_val = item.get('finishpairs')
+                    if finishpairs_val is not None:
+                        try:
+                            finishpairs = Decimal(str(finishpairs_val))
+                        except Exception:
+                            return Response({"detail": "完成雙數格式不正確。"}, status=status.HTTP_400_BAD_REQUEST)
+                        if finishpairs < 0:
+                            return Response({"detail": "完成雙數不可為負數。"}, status=status.HTTP_400_BAD_REQUEST)
+                        d33.finishpairs = finishpairs
+
+                    # 保存 d33，忽略/不允許修改 sentpairs
+                    d33.save()
+
+                    affected_dp033_keys.add(d33.gkey)
+                    if d33.dp031gkey_id:
+                        affected_dp031_keys.add(d33.dp031gkey_id)
+                    if d33.dp030gkey_id:
+                        affected_dp030_keys.add(d33.dp030gkey_id)
+
+                # 2. 呼叫 recalculate_sample_status 處理 dp033 影響 (這會重新計算被動過尺碼的 dp031/dp030 狀態)
+                if affected_dp033_keys:
+                    from .services.sample_status_service import recalculate_sample_status
+                    recalculate_sample_status(
+                        dp033_keys=list(affected_dp033_keys)
+                    )
+
+                # 3. 鎖定並更新 dp031 (配色明細，手動覆蓋狀態)
+                for item in dp031_updates:
+                    gkey = item.get('gkey')
+                    if not gkey:
+                        continue
+                    try:
+                        d31 = Dp031.objects.select_for_update().get(pk=gkey)
+                    except Dp031.DoesNotExist:
+                        return Response({"detail": "找不到對應的配色資料，可能已被刪除，請重新查詢後再操作。"}, status=status.HTTP_400_BAD_REQUEST)
+
+                    # 狀態不合法校驗
+                    status_val = item.get('status')
+                    if status_val is not None:
+                        if status_val not in ['0', '1', '2', '3']:
+                            return Response({"detail": "狀態值不合法。"}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # 取消狀態防重開校驗
+                        if d31.status == '0' and status_val != '0':
+                            return Response({"detail": "取消狀態的配色不可於 DP050 重新啟用。"}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        d31.status = status_val
+
+                    # NOTE: dp031.remark / dp031.editdate / dp031.mdes101gkey
+                    # columns do NOT exist in the actual PostgreSQL DB.
+                    # Only 'status' (and other original columns) can be saved.
+                    # Skip writing to non-existent columns.
+
+                    # Only save status (the only dp031 field DP050 can update)
+                    d31.save(update_fields=['status'])
+
+                    affected_dp031_keys.add(d31.gkey)
+                    if d31.dp030gkey_id:
+                        affected_dp030_keys.add(d31.dp030gkey_id)
+
+                # 4. 為了使手動覆蓋生效，並重算 dp030 主檔狀態，我們再次呼叫 recalculate_sample_status。
+                # 但這次只傳入 dp030_keys，這樣 recalculate_sample_status 只會跑第 3 步（重新計算主單狀態），
+                # 就不會覆蓋我們在第 3 步中剛剛寫入的配色手動 status 覆蓋值！
+                if affected_dp030_keys:
+                    from .services.sample_status_service import recalculate_sample_status
+                    recalculate_sample_status(
+                        dp030_keys=list(affected_dp030_keys)
+                    )
+
+            return Response({
+                "success": True,
+                "updated_dp031_count": len(dp031_updates),
+                "updated_dp033_count": len(dp033_updates),
+                "affected_dp030_keys": list(affected_dp030_keys),
+                "affected_dp031_keys": list(affected_dp031_keys),
+                "affected_dp033_keys": list(affected_dp033_keys)
+            })
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class Dp032ViewSet(BaseDictionaryViewSet):
     """樣品部位材料明細 ViewSet"""
@@ -1596,6 +1870,32 @@ class Dp033ViewSet(BaseDictionaryViewSet):
     """樣品配色尺碼配比 ViewSet"""
     queryset = Dp033.objects.all()
     serializer_class = Dp033Serializer
+
+    @action(detail=False, methods=['get'], url_path='dp050_sizes')
+    def dp050_sizes(self, request):
+        dp031gkey = request.query_params.get('dp031gkey')
+        if not dp031gkey:
+            return Response({"detail": "dp031gkey is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        qs = Dp033.objects.filter(dp031gkey=dp031gkey).order_by('serialno')
+        res = []
+        for row in qs:
+            res.append({
+                "gkey": row.gkey,
+                "dp033gkey": row.gkey,
+                "dp031gkey": row.dp031gkey_id or "",
+                "dp030gkey": row.dp030gkey_id or "",
+                "size": row.size or "",
+                "custpairs": float(row.custpairs or 0),
+                "keeppairs": float(row.keeppairs or 0),
+                "sentpairs": float(row.sentpairs or 0),
+                "received": float(row.receive or 0),
+                "thisreceive": 0.0,
+                "receive": float(row.receive or 0),
+                "finishpairs": float(row.finishpairs or 0)
+            })
+        return Response(res)
+
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -1729,6 +2029,173 @@ class Dp040ViewSet(viewsets.ModelViewSet):
         if year:
             qs = qs.filter(year=year)
         return qs.order_by('-sentdate', '-invoiceno')
+
+    @action(detail=False, methods=['get'], url_path='next_invoice_no')
+    def next_invoice_no(self, request):
+        from django.utils import timezone
+        today_str = timezone.localtime().strftime('%Y%m%d')
+        prefix = today_str
+        candidates = Dp040.objects.filter(invoiceno__startswith=prefix).values_list('invoiceno', flat=True)
+        
+        max_seq = 0
+        for val in candidates:
+            if len(val) >= len(prefix) + 4:
+                suffix = val[len(prefix):len(prefix)+4]
+                try:
+                    seq = int(suffix)
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    pass
+            elif len(val) > len(prefix):
+                suffix = val[len(prefix):]
+                try:
+                    seq = int(suffix)
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    pass
+                    
+        next_seq = max_seq + 1
+        next_invoiceno = f"{prefix}{next_seq:04d}"
+        return Response({"invoiceno": next_invoiceno})
+
+    @action(detail=False, methods=['get'], url_path='import_candidates')
+    def import_candidates(self, request):
+        from decimal import Decimal
+        from rest_framework import status
+        
+        ba010gkey = request.query_params.get('ba010gkey')
+        if not ba010gkey:
+            return Response({"detail": "ba010gkey is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        ba015gkey = request.query_params.get('ba015gkey')
+        sampleno = request.query_params.get('sampleno')
+        styleno = request.query_params.get('styleno')
+        stylename = request.query_params.get('stylename')
+        stock = request.query_params.get('stock')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+        dp002gkey = request.query_params.get('dp002gkey')
+        size = request.query_params.get('size')
+        color = request.query_params.get('color')
+        samplestatus = request.query_params.get('samplestatus', '1')
+        
+        from api.models import Dp033
+        
+        qs = Dp033.objects.select_related(
+            'dp030gkey',
+            'dp031gkey',
+            'dp030gkey__ba010gkey',
+            'dp030gkey__ba015gkey',
+            'dp030gkey__ba055gkey',
+            'dp030gkey__dp002gkey'
+        )
+        
+        qs = qs.filter(dp030gkey__ba010gkey=ba010gkey)
+        
+        # Exclude cancelled status
+        qs = qs.exclude(dp030gkey__status='0')
+        qs = qs.exclude(dp031gkey__status='0')
+        
+        # Exclude completed status
+        qs = qs.exclude(dp030gkey__status='3')
+        
+        # Apply optional filters
+        if ba015gkey:
+            qs = qs.filter(dp030gkey__ba015gkey=ba015gkey)
+        if sampleno:
+            qs = qs.filter(dp030gkey__sampleno__icontains=sampleno)
+        if styleno:
+            qs = qs.filter(dp031gkey__styleno__icontains=styleno)
+        if stylename:
+            qs = qs.filter(dp030gkey__stylename__icontains=stylename)
+        if stock:
+            qs = qs.filter(dp030gkey__stock__icontains=stock)
+        if year:
+            qs = qs.filter(dp030gkey__year=year)
+        if ba055gkey:
+            qs = qs.filter(dp030gkey__ba055gkey=ba055gkey)
+        if dp002gkey:
+            qs = qs.filter(dp030gkey__dp002gkey=dp002gkey)
+        if size:
+            qs = qs.filter(size=size)
+        if color:
+            qs = qs.filter(dp031gkey__color__icontains=color)
+            
+        candidates = []
+        for s in qs:
+            custpairs = s.custpairs or Decimal('0')
+            keeppairs = s.keeppairs or Decimal('0')
+            sentpairs = s.sentpairs or Decimal('0')
+            receive = s.receive or Decimal('0')
+            finishpairs = s.finishpairs or Decimal('0')
+            
+            if samplestatus in ['1', '2']:
+                if samplestatus == '2':
+                    outstanding = custpairs - sentpairs
+                else:
+                    outstanding = (custpairs + keeppairs) - sentpairs
+            elif samplestatus == '3':
+                outstanding = (custpairs + keeppairs - receive) - sentpairs
+            else:
+                outstanding = custpairs - sentpairs
+                
+            if outstanding <= 0:
+                continue
+                
+            customer_name = getattr(getattr(s.dp030gkey, 'ba010gkey', None), 'shortname', '')
+            factory_name = getattr(getattr(s.dp030gkey, 'ba015gkey', None), 'shortname', '')
+            season_name = getattr(getattr(s.dp030gkey, 'ba055gkey', None), 'groupcode', '')
+            sampletype_name = getattr(getattr(s.dp030gkey, 'dp002gkey', None), 'sampletype', '')
+            brand_name_val = getattr(getattr(s.dp030gkey, 'ba009gkey', None), 'ebrand', '') or getattr(getattr(s.dp030gkey, 'ba009gkey', None), 'cbrand', '') or ''
+            bottom_val = getattr(s.dp031gkey, 'bottom', '') or ''
+            photopath_val = getattr(s.dp031gkey, 'photopath', '') or getattr(s.dp030gkey, 'photopath', '') or ''
+            
+            price_val = getattr(s.dp031gkey, 'price', Decimal('0')) or Decimal('0')
+            
+            candidates.append({
+                "dp033gkey": s.gkey,
+                "dp030gkey": s.dp030gkey.gkey if s.dp030gkey else None,
+                "dp031gkey": s.dp031gkey.gkey if s.dp031gkey else None,
+                "sampleno": s.dp030gkey.sampleno if s.dp030gkey else '',
+                "styleno": s.dp031gkey.styleno if s.dp031gkey else '',
+                "stylename": s.dp030gkey.stylename if s.dp030gkey else '',
+                "stock": s.dp030gkey.stock if s.dp030gkey else '',
+                "color": s.dp031gkey.color if s.dp031gkey else '',
+                "ecolor": s.dp031gkey.ecolor if s.dp031gkey else '',
+                "size": s.size or '',
+                "barcode": s.barcode or '',
+                "custpairs": float(custpairs),
+                "keeppairs": float(keeppairs),
+                "sentpairs": float(sentpairs),
+                "receive": float(receive),
+                "finishpairs": float(finishpairs),
+                "outstanding_to_send": float(outstanding),
+                "price": float(price_val),
+                "amount": float(outstanding * price_val),
+                "ba010gkey": s.dp030gkey.ba010gkey.gkey if s.dp030gkey and s.dp030gkey.ba010gkey else None,
+                "customer": customer_name,
+                "ba015gkey": s.dp030gkey.ba015gkey.gkey if s.dp030gkey and s.dp030gkey.ba015gkey else None,
+                "factory": factory_name,
+                "season": season_name,
+                "sampletype": sampletype_name,
+                "brand": brand_name_val,
+                "bottom": bottom_val,
+                "photopath": photopath_val
+            })
+            
+        try:
+            limit = int(request.query_params.get('limit', 500))
+            if limit < 1:
+                limit = 500
+            elif limit > 2000:
+                limit = 2000
+        except ValueError:
+            limit = 500
+            
+        return Response(candidates[:limit])
+
 
     @action(detail=False, methods=['post'], url_path='deep_save')
     def deep_save(self, request):
@@ -2164,6 +2631,86 @@ def dashboard_analytics(request):
         "seasons": season_data,
         "bottoms": bottom_data
     })
+
+
+class Ba076ViewSet(viewsets.ModelViewSet):
+    """付款條件明細"""
+    queryset = Ba076.objects.all()
+    serializer_class = Ba076Serializer
+
+    def get_queryset(self):
+        queryset = Ba076.objects.all()
+        ba075gkey = self.request.query_params.get('ba075gkey')
+        if ba075gkey:
+            queryset = queryset.filter(ba075gkey=ba075gkey)
+        return queryset
+
+
+class Mr001ViewSet(BaseDictionaryViewSet):
+    """資材片語字庫設定 (MR001)"""
+    queryset = Phrase.objects.all()
+    serializer_class = PhraseSerializer
+
+    def get_queryset(self):
+        return Phrase.objects.filter(f2type='MR').order_by('serialno')
+
+    def perform_create(self, serializer):
+        serializer.save(f2type='MR')
+
+    def bulk_save(self, request):
+        if 'upsert' in request.data:
+            for item in request.data['upsert']:
+                item['f2type'] = 'MR'
+        return super().bulk_save(request)
+
+
+class Mr002ViewSet(BaseDictionaryViewSet):
+    """顏色大類設定 (MR002)"""
+    queryset = Mr002.objects.all()
+    serializer_class = Mr002Serializer
+
+
+class Mr020ViewSet(BaseDictionaryViewSet):
+    """材料厚度設定 (MR020)"""
+    queryset = Mr020.objects.all()
+    serializer_class = Mr020Serializer
+
+
+class Mr025ViewSet(BaseDictionaryViewSet):
+    """材料幅度設定 (MR025)"""
+    queryset = Mr025.objects.all()
+    serializer_class = Mr025Serializer
+
+
+class Mr031ViewSet(BaseDictionaryViewSet):
+    """加工方式設定 (MR031)"""
+    queryset = Mr031.objects.all()
+    serializer_class = Mr031Serializer
+
+
+class Mr010ViewSet(viewsets.ViewSet):
+    """Mock顏色明細設定 (MR010)"""
+    def list(self, request):
+        return Response([
+            {"gkey": "clr_gkey_1", "colorcode": "01", "colorname": "紅色"},
+            {"gkey": "clr_gkey_2", "colorcode": "02", "colorname": "黑色"},
+            {"gkey": "clr_gkey_3", "colorcode": "03", "colorname": "白色"},
+            {"gkey": "clr_gkey_4", "colorcode": "04", "colorname": "藍色"},
+            {"gkey": "clr_gkey_5", "colorcode": "05", "colorname": "黃色"},
+        ])
+
+
+class Mr035ViewSet(viewsets.ViewSet):
+    """Mock材料品名設定 (MR035)"""
+    def list(self, request):
+        return Response([
+            {"gkey": "mat_gkey_1", "mstkno": "MAT-001", "mname": "皮革"},
+            {"gkey": "mat_gkey_2", "mstkno": "MAT-002", "mname": "網布"},
+            {"gkey": "mat_gkey_3", "mstkno": "MAT-003", "mname": "橡膠"},
+            {"gkey": "mat_gkey_4", "mstkno": "MAT-004", "mname": "帆布"},
+            {"gkey": "mat_gkey_5", "mstkno": "MAT-005", "mname": "PU"},
+        ])
+
 
 
 

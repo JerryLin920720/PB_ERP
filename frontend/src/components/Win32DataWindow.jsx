@@ -4,6 +4,16 @@ import { message, Modal } from 'antd';
 import './Win32DataWindow.css';
 
 /**
+ * Normalize API response content to extract list rows
+ */
+const normalizeListResponse = (responseData) => {
+  if (Array.isArray(responseData)) return responseData;
+  if (Array.isArray(responseData?.results)) return responseData.results;
+  if (Array.isArray(responseData?.data)) return responseData.data;
+  return null;
+};
+
+/**
  * Helper to construct detail resource URL
  */
 const buildDetailUrl = (baseUrl, gkey) => {
@@ -86,9 +96,9 @@ const formatBackendError = (errorData, columns = []) => {
     if (cleanMsg.includes('not a valid choice')) {
       return '無效的選項值。';
     }
-    if (cleanMsg.includes('ensure this value has at most')) {
+    if (cleanMsg.includes('ensure this field has no more than') || cleanMsg.includes('ensure this value has at most')) {
       const match = msg.match(/\d+/);
-      return `字元長度超出限制${match ? `（最大長度 ${match[0]} 字元）` : ''}。`;
+      return `字元長度超出限制${match ? `（最多 ${match[0]} 個字元）` : ''}。`;
     }
     if (cleanMsg.includes('max_length') || cleanMsg.includes('too long') || cleanMsg.includes('exceeds')) {
       return '長度超出限制。';
@@ -213,12 +223,24 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     setStatusMsg('正在讀取資料庫...');
     try {
       const response = await axios.get(apiUrl);
-      const data = response.data;
       
+      // Debug logs for response shape diagnostic
+      console.log('[Win32DataWindow] fetchRows Response Debug:', {
+        apiUrl,
+        status: response.status,
+        data: response.data,
+        isArrayDirectly: Array.isArray(response.data)
+      });
+
+      const normalized = normalizeListResponse(response.data);
+      if (!normalized) {
+        throw new Error('讀取資料格式不正確，請檢查 API 回傳格式。');
+      }
+
+      console.log(`[Win32DataWindow] fetchRows resolved rows count: ${normalized.length}`);
+
       // 依照 SerialNo 排序
-      const sortedData = Array.isArray(data) 
-        ? data.sort((a, b) => Number(a.serialno || 0) - Number(b.serialno || 0))
-        : [];
+      const sortedData = normalized.sort((a, b) => Number(a.serialno || 0) - Number(b.serialno || 0));
       
       setRows(sortedData);
       setDirtyMap({});
@@ -227,6 +249,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
       setEditingRowIndex(-1); // 重置為查詢模式
       setStatusMsg(`讀取完成。共 ${sortedData.length} 筆資料。`);
     } catch (err) {
+      console.error('[Win32DataWindow] fetchRows Error:', err);
       setStatusMsg(`錯誤: ${err.response?.data?.detail || err.message}`);
     } finally {
       setLoading(false);
@@ -374,17 +397,27 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
 
   // 💾 儲存 (Save)
   const handleSave = async () => {
+    console.log('[Win32DataWindow] handleSave called');
     setLoading(true);
     setStatusMsg('正在寫入批次交易 (Bulk Saving)...');
     
-    // 由於 handleSave 是被全域事件調用，我們需要在當前閉包快照裡安全獲取最新狀態
-    // 我們可以在執行前做一個短路判斷，但最佳的做法是從當前組件最新狀態直接取用。
-    let upsertList = [];
-    let deleteList = [];
+    // 從實時 Ref 讀取狀態，徹底杜絕 Stale Closure 閉包過期問題
+    const currentDirtyMap = opsRef.current.dirtyMap || {};
+    const currentDeleteSet = opsRef.current.deleteSet || new Set();
 
-    // 這裡直接利用 component state，因為 React Effect 重綁定會確保最新值
-    upsertList = Object.values(dirtyMap);
-    deleteList = Array.from(deleteSet);
+    let upsertList = Object.values(currentDirtyMap);
+    let deleteList = Array.from(currentDeleteSet);
+
+    const bulkApiUrl = apiUrl.endsWith('/') ? `${apiUrl}bulk_save/` : `${apiUrl}/bulk_save/`;
+    const payload = {
+      upsert: upsertList,
+      delete: deleteList
+    };
+
+    console.log('[Win32DataWindow] saving to:', bulkApiUrl);
+    console.log('[Win32DataWindow] payload:', payload);
+    console.log('[Win32DataWindow] upsertList.length:', upsertList.length);
+    console.log('[Win32DataWindow] deleteList.length:', deleteList.length);
 
     if (upsertList.length === 0 && deleteList.length === 0) {
       setStatusMsg('無任何資料異動，無須存檔。');
@@ -393,15 +426,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     }
 
     try {
-      const payload = {
-        upsert: upsertList,
-        delete: deleteList
-      };
-
-      const bulkApiUrl = apiUrl.endsWith('/') ? `${apiUrl}bulk_save/` : `${apiUrl}/bulk_save/`;
-      
       const res = await axios.post(bulkApiUrl, payload);
       
+      console.log('[Win32DataWindow] save success. status:', res.status, 'data:', res.data);
       if (res.data.success) {
         setStatusMsg('存檔成功！正在重載最新資料...');
         setEditingRowIndex(-1); // 存檔成功後回歸唯讀檢視
@@ -410,6 +437,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
         throw new Error(res.data.detail || '存檔失敗');
       }
     } catch (err) {
+      console.log('[Win32DataWindow] save failed. status:', err.response?.status, 'data:', err.response?.data, 'message:', err.message);
       const errorMsg = formatBackendError(err.response?.data || err.message, columns);
       message.error(`存檔失敗:\n${errorMsg}`);
       setStatusMsg(`存檔失敗: ${errorMsg}`);
@@ -419,6 +447,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
 
   // ⚙️ 即時儲存格變更 (Immediate Inline Value Committer)
   const handleCellChange = (rIndex, colKey, newVal) => {
+    // 1. 同步更新 rows
     setRows(prev => {
       const next = [...prev];
       const row = next[rIndex];
@@ -426,29 +455,53 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
       
       const updatedRow = { ...row, [colKey]: newVal };
       next[rIndex] = updatedRow;
-      
-      // 同步髒資料追蹤 (物理復刻精準度：確保整行資料被送出，防範 Partial Update 導致的必填欄位缺失)
-      setDirtyMap(prevDirty => ({
-        ...prevDirty,
-        [row.gkey]: updatedRow
-      }));
-      
       return next;
+    });
+    
+    // 2. 在 setRows 外部執行 setDirtyMap 更新以防 React State updater 副作用被丟失
+    setRows(prev => {
+      const row = prev[rIndex];
+      if (row) {
+        const updatedRow = { ...row, [colKey]: newVal };
+        setDirtyMap(prevDirty => ({
+          ...prevDirty,
+          [row.gkey]: updatedRow
+        }));
+      }
+      return prev;
     });
   };
 
-  // ⚡ 全域 MDI 廣播指令接收器 (精準綁定最新狀態依賴)
+  // 透過 Ref 封裝實時的方法與狀態，避免事件監聽器發生過期閉包
+  const opsRef = useRef({});
+  useEffect(() => {
+    opsRef.current = {
+      handleSave,
+      handleDelete,
+      handleInsert,
+      fetchRows,
+      selectedRowIndex,
+      dirtyMap,
+      deleteSet
+    };
+  });
+
+  // ⚡ 全域 MDI 廣播指令接收器 (精準綁定實時 Ref)
   useEffect(() => {
     const handleGlobalCommand = (e) => {
       const { action, targetSheet } = e.detail;
       
       if (targetSheet === sheetId) {
         console.log(`⚡ [${sheetId}] Intercepted command: ${action}`);
-        if (action === 'retrieve') fetchRows();
-        else if (action === 'edit') setEditingRowIndex(selectedRowIndex); // 解開目前選取列編輯鎖
-        else if (action === 'insert') handleInsert();
-        else if (action === 'delete') handleDelete();
-        else if (action === 'save') handleSave();
+        const ops = opsRef.current;
+        if (action === 'retrieve') ops.fetchRows();
+        else if (action === 'edit') setEditingRowIndex(ops.selectedRowIndex); // 解開目前選取列編輯鎖
+        else if (action === 'insert') ops.handleInsert();
+        else if (action === 'delete') ops.handleDelete();
+        else if (action === 'save') {
+          console.log('[Win32DataWindow] save command received');
+          ops.handleSave();
+        }
       }
     };
 
@@ -456,7 +509,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     return () => {
       window.removeEventListener('mdi-global-command', handleGlobalCommand);
     };
-  }, [apiUrl, sheetId, rows, selectedRowIndex, dirtyMap, deleteSet]);
+  }, [sheetId]);
 
   useEffect(() => {
     fetchRows();
@@ -523,6 +576,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
                               className="dw-cell-input-modern"
                               value={row[col.key] === undefined || row[col.key] === null ? '' : row[col.key]}
                               onChange={(e) => handleCellChange(rIndex, col.key, e.target.value)}
+                              maxLength={col.maxLength}
                             />
                           )
                         ) : (

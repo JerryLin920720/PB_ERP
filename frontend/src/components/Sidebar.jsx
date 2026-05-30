@@ -33,21 +33,33 @@ export default function Sidebar({ onSelectNode, activeNode }) {
   const removeFromFavorites = (code) => {
     const newFavs = favorites.filter(f => f.code !== code);
     saveFavorites(newFavs);
-    message.success(`🗑️ 已從我的最愛移除`);
+    message.success('🗑️ 已從我的最愛移除');
   };
 
   // 節點展開狀態管理
   const [expandedNodes, setExpandedNodes] = useState({
     favorite: true,
     root: true,
-    ba: false, // 基本資料預設收起
+    ss: false,
+    ba: false,
+    dp: false,
+    sm: false,
+    mm: false,
+    sa: false,
+    qc: false,
+    sh: false,
+    fm: false,
+    cc: false,
   });
 
   const toggleNode = (node) => {
     setExpandedNodes(prev => ({ ...prev, [node]: !prev[node] }));
   };
 
-  // 基本資料 26 隻作業序列 (物理完全一致)
+  // 系統設置管理系統：目前先保留為群組，後續可依 PB 原始程式補入實際作業
+  const ssNodes = [];
+
+  // 基本資料 26 隻作業序列
   const baNodes = [
     { code: 'ba001', label: '個人片語字庫設定' },
     { code: 'ba002', label: '國家設定' },
@@ -77,7 +89,7 @@ export default function Sidebar({ onSelectNode, activeNode }) {
     { code: 'es101', label: '員工資料管理' },
   ];
 
-  // 開發部門管理系統 28 隻核心作業 (物理完全對齊)
+  // 開發部門管理系統 28 隻核心作業
   const dpNodes = [
     { code: 'dp001', label: '開發片語字庫' },
     { code: 'dp002', label: '樣品類別設定' },
@@ -109,21 +121,121 @@ export default function Sidebar({ onSelectNode, activeNode }) {
     { code: 'dp100', label: '開發費用轉嫁管理' },
   ];
 
-  // 系統其他主模組群組 (開發部門移出為靜態渲染)
-  const modules = [
-    { id: 'sample', label: '樣品中心管理系統' },
-    { id: 'sale', label: '銷售訂單管理系統' },
-    { id: 'pur', label: '採購資材管理系統' },
-    { id: 'prod', label: '生產製造管理系統' },
-    { id: 'inv', label: '庫存倉儲管理系統' },
-    { id: 'fin', label: '財務會計結算系統' },
-    { id: 'sys', label: '系統參數維護設定' }
+  // 其餘部門先建立正確主系統節點，核心作業可後續依 PB 程式碼逐步補入
+  const smNodes = []; // 樣品中心管理系統
+  // 資材部門管理系統：MR 作業依「作業代號」遞增排序
+  const mmNodes = [
+    { code: 'mr001', label: '資材片語字庫設定' },
+    { code: 'mr002', label: '顏色大類設定' },
+    { code: 'mr010', label: '顏色小類設定' },
+    { code: 'mr015', label: '材料大類設定' },
+    { code: 'mr020', label: '材料厚度設定' },
+    { code: 'mr025', label: '材料幅度設定' },
+    { code: 'mr030', label: '材料紋路設定' },
+    { code: 'mr031', label: '加工方式設定' },
+    { code: 'mr035', label: '料號主檔設定作業' },
+    { code: 'mr040', label: '材料貼標列印作業' },
+    { code: 'mr045', label: '樣品採購單管理' },
+    { code: 'mr050', label: '樣品調料資料管理' },
+    { code: 'mr053', label: '材料需求查詢作業' },
+    { code: 'mr105', label: '入庫作業' },
+    { code: 'mr110', label: '發料管理' },
+    { code: 'mr115', label: '退貨管理' },
+    { code: 'mr125', label: '庫存/盤點管理作業' },
+    { code: 'mr130', label: '材料庫存查詢作業' },
+    { code: 'mr135', label: '材料進銷存報表' },
   ];
+  const saNodes = [
+    { code: 'sa001', label: '訂單片語字庫' },
+    { code: 'sa005', label: '訂單預算管理' },
+    { code: 'sa006', label: '顏色設定' },
+    { code: 'sa007', label: '配件設定' },
+    { code: 'sa010', label: '客戶資料管理' },
+    { code: 'sa015', label: '訂單資料管理' },
+    { code: 'sa018', label: '未結訂單餘額查詢' },
+    { code: 'sa020', label: '付款方式設定' },
+    { code: 'sa030', label: '配額資料管理' },
+    { code: 'sa040', label: '訂單報價管理' },
+    { code: 'sa045', label: '訂單審核管理' },
+    { code: 'sa046', label: '新鞋訂單樣品審核' },
+    { code: 'sa048', label: '客戶配額查詢' },
+    { code: 'sa050', label: '年度訂單結算' },
+    { code: 'sa055', label: '訂單數量綜合統計' },
+    { code: 'sa058', label: '樣品訂單統計' },
+    { code: 'sa060', label: '出貨單狀態審核' },
+    { code: 'sa065', label: '出貨單資料管理' },
+    { code: 'sa070', label: '訂單餘額明細查詢' },
+    { code: 'sa075', label: '訂單轉入 DP041 管理' },
+    { code: 'sa080', label: '訂單餘額統計' },
+    { code: 'sa085', label: '樣品成本核算' },
+    { code: 'sa090', label: '樣品數量綜合統計' },
+    { code: 'sa095', label: '出貨單統計' },
+    { code: 'sa096', label: '訂單樣品狀態綜合查詢' },
+  ];
+  const qcNodes = []; // Q/C部門管理系統
+  const shNodes = []; // 船務部門管理系統
+  const fmNodes = []; // 財務部門管理系統
+  const ccNodes = []; // 電腦中心管理系統
+
+  const systemModules = [
+    { id: 'ss', label: '系統設置管理系統', nodes: ssNodes, color: '#64748b', fill: '#f1f5f9' },
+    { id: 'ba', label: '基本資料管理系統', nodes: baNodes, color: '#eab308', fill: '#fef08a' },
+    { id: 'dp', label: '開發部門管理系統', nodes: dpNodes, color: '#10b981', fill: '#d1fae5', mapNode: { code: 'dp_map', label: '開發部門管理導航圖' } },
+    { id: 'sm', label: '樣品中心管理系統', nodes: smNodes, color: '#0ea5e9', fill: '#e0f2fe' },
+    { id: 'mm', label: '資材部門管理系統', nodes: mmNodes, color: '#f97316', fill: '#ffedd5' },
+    { id: 'sa', label: '業務部門管理系統', nodes: saNodes, color: '#8b5cf6', fill: '#ede9fe' },
+    { id: 'qc', label: 'Q/C部門管理系統', nodes: qcNodes, color: '#ef4444', fill: '#fee2e2' },
+    { id: 'sh', label: '船務部門管理系統', nodes: shNodes, color: '#06b6d4', fill: '#cffafe' },
+    { id: 'fm', label: '財務部門管理系統', nodes: fmNodes, color: '#22c55e', fill: '#dcfce7' },
+    { id: 'cc', label: '電腦中心管理系統', nodes: ccNodes, color: '#475569', fill: '#e2e8f0' },
+  ];
+
+  const renderLeafNode = (item, options = {}) => {
+    const isSelected = activeNode === item.code;
+    const iconColor = isSelected ? 'var(--primary-color)' : (options.iconColor || '#64748b');
+
+    return (
+      <Dropdown
+        key={item.code}
+        menu={{
+          items: [
+            {
+              key: 'add',
+              label: '⭐️ 加入我的最愛',
+              icon: <Star size={14} color="#eab308" fill="#fef08a" />,
+              onClick: () => addToFavorites(item)
+            }
+          ]
+        }}
+        trigger={['contextMenu']}
+      >
+        <div
+          className={`tree-node leaf ${isSelected ? 'selected-node' : ''}`}
+          onClick={() => onSelectNode && onSelectNode(item.code, item.label)}
+          title={`${item.code} - ${item.label}`}
+        >
+          <span className="leaf-icon"><FileText size={12} color={iconColor} /></span>
+          <span className="node-text">{item.code}--{item.label}</span>
+        </div>
+      </Dropdown>
+    );
+  };
+
+  const renderModuleNode = (item, mod) => {
+    return renderLeafNode(item, { iconColor: mod.color });
+  };
+
+  const renderEmptyModule = () => (
+    <div className="tree-node leaf" style={{ fontStyle: 'italic', opacity: 0.6, pointerEvents: 'none' }}>
+      <span className="leaf-icon"><FileText size={12} /></span>
+      <span className="node-text">尚未配置核心作業...</span>
+    </div>
+  );
 
   return (
     <aside className="classic-sidebar">
       <div className="tree-container">
-        
+
         {/* 🌟 Level 1: 我的最愛 (PB 原廠規格，記錄常用作業) */}
         <div className="tree-node root-node" onClick={() => toggleNode('favorite')}>
           <span className="tree-collapse-btn">
@@ -158,7 +270,7 @@ export default function Sidebar({ onSelectNode, activeNode }) {
                     }}
                     trigger={['contextMenu']}
                   >
-                    <div 
+                    <div
                       className={`tree-node leaf ${isSelected ? 'selected-node' : ''}`}
                       onClick={() => onSelectNode && onSelectNode(item.code, item.label)}
                       title={`${item.code} - ${item.label}`}
@@ -186,106 +298,9 @@ export default function Sidebar({ onSelectNode, activeNode }) {
 
         {expandedNodes.root && (
           <div className="tree-children">
-            
-            {/* 🗂️ 子系統 1: 基本資料管理系統 */}
-            <div className="tree-node sub-root" onClick={() => toggleNode('ba')}>
-              <span className="tree-collapse-btn">
-                {expandedNodes.ba ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
-              </span>
-              <span className="node-icon">
-                {expandedNodes.ba ? <FolderOpen size={14} color="#eab308" fill="#fef08a"/> : <Folder size={14} color="#eab308" fill="#fef08a"/>}
-              </span>
-              <span className="node-text">基本資料管理系統</span>
-            </div>
-
-            {expandedNodes.ba && (
-              <div className="tree-children">
-                {baNodes.map(item => {
-                  const isSelected = activeNode === item.code;
-                  return (
-                    <Dropdown
-                      key={item.code}
-                      menu={{
-                        items: [
-                          {
-                            key: 'add',
-                            label: '⭐️ 加入我的最愛',
-                            icon: <Star size={14} color="#eab308" fill="#fef08a" />,
-                            onClick: () => addToFavorites(item)
-                          }
-                        ]
-                      }}
-                      trigger={['contextMenu']}
-                    >
-                      <div 
-                        className={`tree-node leaf ${isSelected ? 'selected-node' : ''}`}
-                        onClick={() => onSelectNode && onSelectNode(item.code, item.label)}
-                        title={`${item.code} - ${item.label}`}
-                      >
-                        <span className="leaf-icon"><FileText size={12} color={isSelected ? 'var(--primary-color)' : '#64748b'} /></span>
-                        <span className="node-text">{item.code}--{item.label}</span>
-                      </div>
-                    </Dropdown>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 🗂️ 子系統 2: 開發部門管理系統 */}
-            <div className="tree-node sub-root" onClick={() => toggleNode('dp')}>
-              <span className="tree-collapse-btn">
-                {expandedNodes.dp ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
-              </span>
-              <span className="node-icon">
-                {expandedNodes.dp ? <FolderOpen size={14} color="#10b981" fill="#d1fae5"/> : <Folder size={14} color="#10b981" fill="#d1fae5"/>}
-              </span>
-              <span className="node-text">開發部門管理系統</span>
-            </div>
-
-            {expandedNodes.dp && (
-              <div className="tree-children">
-                {/* ⭐ 第一個葉子節點：開發部門導航圖專屬按鈕 */}
-                <div 
-                  className={`tree-node leaf ${activeNode === 'dp_map' ? 'selected-node' : ''}`}
-                  onClick={() => onSelectNode && onSelectNode('dp_map', '開發部門導航圖')}
-                  title="開發部門導航圖"
-                >
-                  <span className="leaf-icon"><FolderOpen size={12} color={activeNode === 'dp_map' ? 'var(--primary-color)' : '#10b981'} /></span>
-                  <span className="node-text" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>📍 開發部門管理導航圖</span>
-                </div>
-
-                {dpNodes.map(item => {
-                  const isSelected = activeNode === item.code;
-                  return (
-                    <Dropdown
-                      key={item.code}
-                      menu={{
-                        items: [
-                          {
-                            key: 'add',
-                            label: '⭐️ 加入我的最愛',
-                            icon: <Star size={14} color="#eab308" fill="#fef08a" />,
-                            onClick: () => addToFavorites(item)
-                          }
-                        ]
-                      }}
-                      trigger={['contextMenu']}
-                    >
-                      <div 
-                        className={`tree-node leaf ${isSelected ? 'selected-node' : ''}`}
-                        onClick={() => onSelectNode && onSelectNode(item.code, item.label)}
-                        title={`${item.code} - ${item.label}`}
-                      >
-                        <span className="leaf-icon"><FileText size={12} color={isSelected ? 'var(--primary-color)' : '#64748b'} /></span>
-                        <span className="node-text">{item.code}--{item.label}</span>
-                      </div>
-                    </Dropdown>
-                  );
-                })}
-              </div>
-            )}
-            {modules.map(mod => {
+            {systemModules.map(mod => {
               const isExpanded = !!expandedNodes[mod.id];
+
               return (
                 <div key={mod.id}>
                   <div className="tree-node sub-root" onClick={() => toggleNode(mod.id)}>
@@ -293,23 +308,40 @@ export default function Sidebar({ onSelectNode, activeNode }) {
                       {isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
                     </span>
                     <span className="node-icon">
-                      {isExpanded ? <FolderOpen size={14} color="#eab308" fill="#fef08a"/> : <Folder size={14} color="#eab308" fill="#fef08a"/>}
+                      {isExpanded
+                        ? <FolderOpen size={14} color={mod.color} fill={mod.fill}/>
+                        : <Folder size={14} color={mod.color} fill={mod.fill}/>
+                      }
                     </span>
                     <span className="node-text">{mod.label}</span>
                   </div>
-                  
+
                   {isExpanded && (
                     <div className="tree-children">
-                      <div className="tree-node leaf" style={{ fontStyle: 'italic', opacity: 0.6 }}>
-                        <span className="leaf-icon"><FileText size={12} /></span>
-                        <span className="node-text">尚未配置核心作業...</span>
-                      </div>
+                      {mod.mapNode && (
+                        <div
+                          className={`tree-node leaf ${activeNode === mod.mapNode.code ? 'selected-node' : ''}`}
+                          onClick={() => onSelectNode && onSelectNode(mod.mapNode.code, mod.mapNode.label)}
+                          title={mod.mapNode.label}
+                        >
+                          <span className="leaf-icon">
+                            <FolderOpen size={12} color={activeNode === mod.mapNode.code ? 'var(--primary-color)' : mod.color} />
+                          </span>
+                          <span className="node-text" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
+                            📍 {mod.mapNode.label}
+                          </span>
+                        </div>
+                      )}
+
+                      {mod.nodes.length > 0
+                        ? mod.nodes.map(item => renderModuleNode(item, mod))
+                        : renderEmptyModule()
+                      }
                     </div>
                   )}
                 </div>
               );
             })}
-
           </div>
         )}
       </div>

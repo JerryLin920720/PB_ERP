@@ -13,7 +13,9 @@ export default function ERPLookupModal({
   visible,
   onCancel,
   onSelect,
-  apiBase = ''
+  apiBase = '',
+  queryParams = {},
+  title
 }) {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -24,6 +26,19 @@ export default function ERPLookupModal({
 
   // 取得註冊設定
   const config = lookupRegistry[type];
+
+  // Compute modalTitle based on priority:
+  // 1. prop title (field-level override)
+  // 2. config.title
+  // 3. config.moduleCode + config.moduleName
+  // 4. fallback: 關聯資料檢索
+  const modalTitle = title
+    ? title
+    : config?.title
+      ? config.title
+      : (config?.moduleCode && config?.moduleName)
+        ? `關聯作業：${config.moduleCode} ${config.moduleName}`
+        : '關聯資料檢索';
 
   // 1. 開窗時載入資料
   useEffect(() => {
@@ -62,16 +77,20 @@ export default function ERPLookupModal({
     if (!config) return;
     setLoading(true);
     try {
-      const host = apiBase || 'http://localhost:8001';
+      const host = 'http://localhost:8001';
       const path = config.apiUrl.startsWith('/') ? config.apiUrl : `/${config.apiUrl}`;
       const url = `${host}${path}`;
 
-      const res = await axios.get(url);
-      setData(res.data || []);
-      setFilteredData(res.data || []);
+      const res = await axios.get(url, { params: queryParams });
+      const fetched = res.data || [];
+      setData(fetched);
+      setFilteredData(fetched);
+      if (fetched.length === 0) {
+        message.info('關聯作業目前沒有資料，請先建立相關基本資料。');
+      }
     } catch (err) {
       console.error('Lookup fetch failed:', err);
-      message.error('讀取檢索字典失敗！');
+      message.error('讀取關聯作業資料失敗，請稍後再試或聯絡系統管理員。');
     } finally {
       setLoading(false);
     }
@@ -94,7 +113,7 @@ export default function ERPLookupModal({
 
   return (
     <Modal
-      title={config.title || '檢索開窗'}
+      title={modalTitle}
       open={visible}
       onOk={handleOk}
       onCancel={onCancel}
@@ -122,6 +141,11 @@ export default function ERPLookupModal({
         columns={config.columns}
         rowKey={rowKeyField}
         pagination={{ pageSize: 8, showSizeChanger: false }}
+        locale={{
+          emptyText: data.length === 0
+            ? '關聯作業目前沒有資料，請先建立相關基本資料。'
+            : '沒有符合條件的關聯資料。'
+        }}
         onRow={(record) => ({
           onClick: () => {
             setSelectedRowKey(record[rowKeyField]);

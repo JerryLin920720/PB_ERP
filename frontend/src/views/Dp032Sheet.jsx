@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Input, Select, Button, Space, Card, Row, Col, Progress, Badge, Image, Tag, message } from 'antd';
-import { SearchOutlined, ReloadOutlined, DashboardOutlined, PictureOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Table, Input, Select, Button, Space, Card, Row, Col, Progress, Badge, Image, Tag, DatePicker, message } from 'antd';
+import { SearchOutlined, ReloadOutlined, DashboardOutlined, PictureOutlined, ClockCircleOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 
@@ -10,17 +10,34 @@ export default function Dp032Sheet() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
+  const [expandFilters, setExpandFilters] = useState(false);
 
   // 🔍 Filters
-  const [qCust, setQCust] = useState('');
+  const [qCust, setQCust] = useState(undefined);
+  const [qFTY, setQFTY] = useState(undefined);
   const [qYear, setQYear] = useState('');
+  const [qSeason, setQSeason] = useState(undefined);
+  const [qSampleType, setQSampleType] = useState(undefined);
+  
   const [qSampleNo, setQSampleNo] = useState('');
-  const [qSampleType, setQSampleType] = useState('');
+  const [qStyleNo, setQStyleNo] = useState('');
+  const [qStyleName, setQStyleName] = useState('');
+  const [qStock, setQStock] = useState('');
+  const [qGroup, setQGroup] = useState('');
+  
+  const [qLastNo, setQLastNo] = useState('');
+  const [qOutsoleNo, setQOutsoleNo] = useState('');
+  const [qHeelNo, setQHeelNo] = useState('');
+  const [qMaker, setQMaker] = useState('');
+  const [qApprove, setQApprove] = useState(undefined);
+  const [qDateRange, setQDateRange] = useState(null);
 
   // 🌍 Dictionary Cache
   const [lookups, setLookups] = useState({
     customers: [],
-    sampleTypes: []
+    sampleTypes: [],
+    factories: [],
+    seasons: []
   });
 
   useEffect(() => {
@@ -56,13 +73,17 @@ export default function Dp032Sheet() {
 
   const fetchLookups = async () => {
     try {
-      const [custRes, stRes] = await Promise.all([
+      const [custRes, stRes, ftyRes, ssRes] = await Promise.all([
         axios.get(`${API_URL}ba010/`),
-        axios.get(`${API_URL}dp002/`)
+        axios.get(`${API_URL}dp002/`),
+        axios.get(`${API_URL}ba015/`),
+        axios.get(`${API_URL}ba055/`)
       ]);
       setLookups({
         customers: custRes.data,
-        sampleTypes: stRes.data
+        sampleTypes: stRes.data,
+        factories: ftyRes.data.filter(f => f.type === '1' && (!f.parentgkey)),
+        seasons: ssRes.data
       });
     } catch (e) {
       console.error('Failed to load lookups for DP032', e);
@@ -74,9 +95,27 @@ export default function Dp032Sheet() {
     try {
       const params = {};
       if (qCust) params.ba010gkey = qCust;
+      if (qFTY) params.ba015gkey = qFTY;
       if (qYear) params.year = qYear;
-      if (qSampleNo) params.sampleno = qSampleNo;
+      if (qSeason) params.ba055gkey = qSeason;
       if (qSampleType) params.dp002gkey = qSampleType;
+      
+      if (qSampleNo) params.sampleno = qSampleNo;
+      if (qStyleNo) params.styleno = qStyleNo;
+      if (qStyleName) params.stylename = qStyleName;
+      if (qStock) params.stock = qStock;
+      if (qGroup) params.groupname = qGroup;
+      
+      if (qLastNo) params.lastno = qLastNo;
+      if (qOutsoleNo) params.bottomno = qOutsoleNo;
+      if (qHeelNo) params.heelno = qHeelNo;
+      if (qMaker) params.englishname = qMaker;
+      if (qApprove !== undefined && qApprove !== '') params.approve = qApprove;
+      
+      if (qDateRange && qDateRange[0] && qDateRange[1]) {
+        params.issuedate_from = qDateRange[0].format('YYYY-MM-DD HH:mm:ss');
+        params.issuedate_to = qDateRange[1].format('YYYY-MM-DD HH:mm:ss');
+      }
 
       const res = await axios.get(`${API_URL}dp030/outstanding_samples/`, { params });
       setData(res.data);
@@ -97,10 +136,10 @@ export default function Dp032Sheet() {
       title: '開發指令單號',
       dataIndex: 'sampleno',
       key: 'sampleno',
-      sorter: (a, b) => a.sampleno.localeCompare(b.sampleno),
+      sorter: (a, b) => (a.sampleno || '').localeCompare(b.sampleno || ''),
       render: (text, rec) => (
         <div>
-          <div className="modern-sheet-container">{text}</div>
+          <div style={{ fontWeight: 'bold', color: '#1890ff' }}>{text}</div>
           <div style={{ fontSize: '11px', color: '#8c8c8c' }}>{rec.sampletype || '一般樣品'}</div>
         </div>
       )
@@ -123,33 +162,40 @@ export default function Dp032Sheet() {
         <div>
           <div style={{ fontWeight: '600', color: '#262626' }}>{rec.styleno}</div>
           <div style={{ fontSize: '12px', color: '#595959' }}>
-            {rec.color || '無配色'} <Badge count={rec.size} style={{ backgroundColor: '#fa8c16', marginLeft: 4 }} />
+            {rec.color || '無配色'} {rec.size ? <Badge count={rec.size} style={{ backgroundColor: '#fa8c16', marginLeft: 4 }} /> : <span style={{ color: '#bfbfbf', fontSize: '11px' }}>-</span>}
           </div>
         </div>
       )
     },
     {
-      title: '需求 (客要+留底)',
-      key: 'req',
-      width: 110,
+      title: '客要雙數',
+      dataIndex: 'custpairs',
+      key: 'custpairs',
+      width: 90,
       align: 'right',
-      render: (_, rec) => (
-        <span style={{ fontWeight: 'bold' }}>
-          {(rec.custpairs + rec.keeppairs).toFixed(1)}
-        </span>
-      )
+      render: v => <span style={{ fontWeight: '500' }}>{(v || 0).toFixed(1)}</span>
     },
     {
-      title: '已出貨',
+      title: '留底雙數',
+      dataIndex: 'keeppairs',
+      key: 'keeppairs',
+      width: 90,
+      align: 'right',
+      render: v => <span style={{ fontWeight: '500' }}>{(v || 0).toFixed(1)}</span>
+    },
+    {
+      title: '已寄出雙數',
       dataIndex: 'finishpairs',
-      width: 80,
+      key: 'finishpairs',
+      width: 100,
       align: 'right',
       render: v => <span style={{ color: '#389e0d', fontWeight: 'bold' }}>{(v || 0).toFixed(1)}</span>
     },
     {
       title: '欠數',
       dataIndex: 'outstanding',
-      width: 80,
+      key: 'outstanding',
+      width: 90,
       align: 'right',
       render: v => (
         <span style={{ color: v > 0 ? '#cf1322' : '#bfbfbf', fontWeight: 'bold' }}>
@@ -158,9 +204,10 @@ export default function Dp032Sheet() {
       )
     },
     {
-      title: '出貨達成進度',
+      title: '催交進度',
       dataIndex: 'completion_rate',
-      width: 160,
+      key: 'completion_rate',
+      width: 150,
       sorter: (a, b) => a.completion_rate - b.completion_rate,
       render: (rate) => {
         let status = 'normal';
@@ -177,8 +224,16 @@ export default function Dp032Sheet() {
       }
     },
     {
+      title: '出貨日期',
+      dataIndex: 'sentdate',
+      key: 'sentdate',
+      width: 110,
+      render: v => v ? dayjs(v).format('YYYY-MM-DD') : <span style={{ color: '#bfbfbf' }}>未出貨</span>
+    },
+    {
       title: '要求完成日',
       dataIndex: 'duedate',
+      key: 'duedate',
       width: 110,
       render: v => v ? dayjs(v).format('YYYY-MM-DD') : <span style={{ color: '#bfbfbf' }}>-</span>
     }
@@ -199,27 +254,90 @@ export default function Dp032Sheet() {
 
       {/* 🔎 Query Filters */}
       <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', marginBottom: '16px' }}>
-        <Row gutter={16} align="bottom">
-          <Col span={5}>
+        <Row gutter={[16, 12]} align="bottom">
+          <Col span={6}>
             <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>客戶簡稱</div>
             <Select showSearch allowClear style={{ width: '100%' }} placeholder="全部客戶" value={qCust} onChange={setQCust} options={lookups.customers.map(c => ({ value: c.gkey, label: c.shortname }))} />
           </Col>
-          <Col span={4}>
+          <Col span={5}>
+            <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>工廠簡稱</div>
+            <Select showSearch allowClear style={{ width: '100%' }} placeholder="全部工廠" value={qFTY} onChange={setQFTY} options={lookups.factories.map(f => ({ value: f.gkey, label: f.shortname }))} />
+          </Col>
+          <Col span={3}>
             <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>年度</div>
             <Input placeholder="YYYY" value={qYear} onChange={e => setQYear(e.target.value)} />
           </Col>
           <Col span={5}>
-            <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>指令編號</div>
-            <Input placeholder="關鍵字..." value={qSampleNo} onChange={e => setQSampleNo(e.target.value)} />
+            <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>季節</div>
+            <Select showSearch allowClear style={{ width: '100%' }} placeholder="全部季節" value={qSeason} onChange={setQSeason} options={lookups.seasons.map(s => ({ value: s.gkey, label: s.groupcode }))} />
           </Col>
           <Col span={5}>
             <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>樣品類別</div>
             <Select showSearch allowClear style={{ width: '100%' }} placeholder="篩選類別" value={qSampleType} onChange={setQSampleType} options={lookups.sampleTypes.map(t => ({ value: t.gkey, label: t.sampletype }))} />
           </Col>
-          <Col span={5}>
-            <Button type="primary" icon={<SearchOutlined />} onClick={fetchData} style={{ width: '100%', backgroundColor: '#722ed1', borderColor: '#722ed1' }}>
-              開始分析進度
-            </Button>
+
+          {expandFilters && (
+            <>
+              <Col span={6}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>開發指令號</div>
+                <Input placeholder="單號關鍵字..." value={qSampleNo} onChange={e => setQSampleNo(e.target.value)} />
+              </Col>
+              <Col span={5}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>型體號碼 (StyleNo)</div>
+                <Input placeholder="型體號關鍵字..." value={qStyleNo} onChange={e => setQStyleNo(e.target.value)} />
+              </Col>
+              <Col span={5}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>型體名稱</div>
+                <Input placeholder="型體名關鍵字..." value={qStyleName} onChange={e => setQStyleName(e.target.value)} />
+              </Col>
+              <Col span={4}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>庫存序號 (Stock#)</div>
+                <Input placeholder="庫存序號..." value={qStock} onChange={e => setQStock(e.target.value)} />
+              </Col>
+              <Col span={4}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>組別</div>
+                <Input placeholder="群組名稱..." value={qGroup} onChange={e => setQGroup(e.target.value)} />
+              </Col>
+
+              <Col span={6}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>楦頭編號 (LastNo)</div>
+                <Input placeholder="楦頭編號..." value={qLastNo} onChange={e => setQLastNo(e.target.value)} />
+              </Col>
+              <Col span={5}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>大底編號 (OutsoleNo)</div>
+                <Input placeholder="大底編號..." value={qOutsoleNo} onChange={e => setQOutsoleNo(e.target.value)} />
+              </Col>
+              <Col span={5}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>鞋跟編號 (HeelNo)</div>
+                <Input placeholder="鞋跟編號..." value={qHeelNo} onChange={e => setQHeelNo(e.target.value)} />
+              </Col>
+              <Col span={4}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>開發人 (Maker)</div>
+                <Input placeholder="英文名..." value={qMaker} onChange={e => setQMaker(e.target.value)} />
+              </Col>
+              <Col span={4}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>審核狀態</div>
+                <Select allowClear style={{ width: '100%' }} placeholder="審核篩選" value={qApprove} onChange={setQApprove}>
+                  <Select.Option value="Y">已審核 (Approve)</Select.Option>
+                  <Select.Option value="N">未審核 (UnApprove)</Select.Option>
+                </Select>
+              </Col>
+              <Col span={8}>
+                <div style={{ marginBottom: '4px', fontSize: '12px', color: '#8c8c8c' }}>開單日期範圍 (IssueDate)</div>
+                <DatePicker.RangePicker style={{ width: '100%' }} value={qDateRange} onChange={setQDateRange} />
+              </Col>
+            </>
+          )}
+
+          <Col span={expandFilters ? 16 : 24} style={{ textAlign: 'right', marginTop: '8px' }}>
+            <Space>
+              <Button type="link" onClick={() => setExpandFilters(!expandFilters)} style={{ padding: 0 }}>
+                {expandFilters ? <span>收起進階篩選 <UpOutlined /></span> : <span>展開進階篩選 <DownOutlined /></span>}
+              </Button>
+              <Button type="primary" icon={<SearchOutlined />} onClick={fetchData} style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', width: 140 }}>
+                開始檢索
+              </Button>
+            </Space>
           </Col>
         </Row>
       </div>
@@ -228,7 +346,7 @@ export default function Dp032Sheet() {
       <div style={{ flex: 1, display: 'flex', gap: '16px', overflow: 'hidden' }}>
         
         {/* 📊 Left Grid (Flex 7) */}
-        <div style={{ flex: 7, backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 7, backgroundColor: '#fff', padding: '12px', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <Table
             loading={loading}
             dataSource={data}
@@ -241,6 +359,7 @@ export default function Dp032Sheet() {
               style: { cursor: 'pointer', background: selectedRow?.gkey === record.gkey ? '#f9f0ff' : 'inherit' }
             })}
             bordered
+            scroll={{ y: 'calc(100vh - 430px)' }}
           />
         </div>
 

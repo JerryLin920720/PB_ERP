@@ -624,7 +624,7 @@ class Ba016(models.Model):
     fax = models.CharField(max_length=40, blank=True, null=True, db_column='fax')
     mobilephone = models.CharField(max_length=40, blank=True, null=True, db_column='mobilephone')
     email = models.CharField(max_length=50, blank=True, null=True, db_column='email')
-    parentgkey = models.ForeignKey('self', blank=True, null=True, on_delete=models.SET_NULL, db_column='parentgkey')
+    parentgkey = models.ForeignKey('Ba015', blank=True, null=True, on_delete=models.SET_NULL, db_column='parentgkey', related_name='sub_contacts')
 
     class Meta:
         db_table = 'ba016'
@@ -1536,6 +1536,12 @@ class Dp031(models.Model):
     pic = models.CharField(max_length=1, default='N', db_column='pic')
     photopath = models.CharField(max_length=400, null=True, blank=True, db_column='photopath')
     status = models.CharField(max_length=1, default='1', db_column='status')
+    # NOTE: mdes101gkey / editdate / remark declared here but NOT in the actual PostgreSQL DB.
+    # These are future migration targets and must NOT be referenced in queries.
+    # Removed from model to prevent UndefinedColumn 500 errors on SELECT.
+    # mdes101gkey = models.ForeignKey('Es101', ...)
+    # editdate = models.DateTimeField(...)
+    # remark = models.CharField(...)
 
     class Meta:
         db_table = 'dp031'
@@ -1889,6 +1895,121 @@ class Dp101(models.Model):
     class Meta:
         db_table = 'dp101'
         ordering = ['gkey']
+
+
+class Phrase(models.Model):
+    """資材片語字庫檔 phrase"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    es101gkey = models.CharField(max_length=20, db_column='es101gkey', blank=True, null=True)
+    description = models.TextField(db_column='description')
+    f2type = models.CharField(max_length=5, default='MR', db_column='f2type')
+
+    class Meta:
+        managed = False
+        db_table = 'phrase'
+        ordering = ['serialno']
+
+
+class Mr002(models.Model):
+    """顏色大類設定 mr002"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    kind = models.CharField(max_length=1, db_column='kind')
+    code = models.CharField(max_length=8, db_column='code')
+    cname = models.CharField(max_length=20, db_column='cname')
+
+    class Meta:
+        managed = False
+        db_table = 'mr002'
+        ordering = ['kind', 'code']
+
+
+class Mr020(models.Model):
+    """材料厚度設定 mr020"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    depthno = models.CharField(max_length=20, db_column='depthno')
+    depth = models.CharField(max_length=30, db_column='depth')
+    unit = models.CharField(max_length=15, db_column='unit')
+
+    class Meta:
+        managed = False
+        db_table = 'mr020'
+        ordering = ['depthno']
+
+
+class Mr025(models.Model):
+    """材料幅度設定 mr025"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    breadthno = models.CharField(max_length=20, db_column='breadthno')
+    breadth = models.CharField(max_length=30, db_column='breadth')
+    unit = models.CharField(max_length=15, db_column='unit')
+
+    class Meta:
+        managed = False
+        db_table = 'mr025'
+        ordering = ['breadthno']
+
+
+class Mr031(models.Model):
+    """加工方式設定 mr031"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    makeno = models.CharField(max_length=20, db_column='makeno')
+    makedescription = models.CharField(max_length=200, db_column='makedescription')
+
+    class Meta:
+        managed = False
+        db_table = 'mr031'
+        ordering = ['makeno']
+
+
+class Mr015(models.Model):
+    """材料大類設定 mr015"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    matno = models.CharField(max_length=20, db_column='matno')
+    cname = models.CharField(max_length=60, null=True, blank=True, db_column='cname')
+    ename = models.CharField(max_length=60, null=True, blank=True, db_column='ename')
+
+    class Meta:
+        managed = True   # We created this table ourselves
+        db_table = 'mr015'
+        ordering = ['matno']
+
+
+class Mr016(models.Model):
+    """材料小類設定 mr016"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    mr015gkey = models.ForeignKey(Mr015, on_delete=models.CASCADE, related_name='details_mr016', db_column='mr015gkey')
+    smatno = models.CharField(max_length=20, db_column='smatno')
+    cname = models.CharField(max_length=60, null=True, blank=True, db_column='cname')
+    ename = models.CharField(max_length=60, null=True, blank=True, db_column='ename')
+
+    class Meta:
+        managed = True   # We created this table ourselves
+        db_table = 'mr016'
+        ordering = ['smatno']
+
+
+class Mr030(models.Model):
+    """材料紋路設定 mr030"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    serialno = models.DecimalField(max_digits=10, decimal_places=0, db_column='serialno')
+    veinno = models.CharField(max_length=20, db_column='veinno')
+    cname = models.CharField(max_length=60, null=True, blank=True, db_column='cname')
+    ename = models.CharField(max_length=60, null=True, blank=True, db_column='ename')
+    veinphoto = models.CharField(max_length=400, null=True, blank=True, db_column='veinphoto')
+
+    class Meta:
+        managed = True   # We created this table ourselves
+        db_table = 'mr030'
+        ordering = ['veinno']
+
+
 
 
 

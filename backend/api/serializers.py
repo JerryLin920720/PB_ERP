@@ -10,7 +10,8 @@ from .models import (
     Dp011, Dp012, Dp013, Dp014, Dp023,
     Dp025, Dp026, Dp027, Dp028,
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
-    Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101
+    Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
+    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031
 )
 
 
@@ -361,6 +362,7 @@ class Dp007Serializer(serializers.ModelSerializer):
     parts_name = serializers.ReadOnlyField(source='dp006gkey.parts')
     eparts_name = serializers.ReadOnlyField(source='dp006gkey.eparts')
     dp005_name = serializers.ReadOnlyField(source='dp006gkey.dp005gkey.partgroup')
+    serialno = serializers.ReadOnlyField(source='dp006gkey.serialno')
 
     class Meta:
         model = Dp007
@@ -568,17 +570,6 @@ class Dp025Serializer(serializers.ModelSerializer):
         extra_kwargs = {'gkey': {'required': False}}
 
 
-class Dp031Serializer(serializers.ModelSerializer):
-    sampleno = serializers.ReadOnlyField(source='dp030gkey.sampleno')
-    sample_stylename = serializers.ReadOnlyField(source='dp030gkey.stylename')
-
-    class Meta:
-        model = Dp031
-        fields = '__all__'
-        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
-
-
-
 class Dp033Serializer(serializers.ModelSerializer):
     sampleno = serializers.ReadOnlyField(source='dp030gkey.sampleno')
     styleno = serializers.ReadOnlyField(source='dp031gkey.styleno')
@@ -593,16 +584,110 @@ class Dp033Serializer(serializers.ModelSerializer):
     class Meta:
         model = Dp033
         fields = '__all__'
-        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'dp031gkey': {'required': False},
+            'dp030gkey': {'required': False}
+        }
+
+
+class Dp031Serializer(serializers.ModelSerializer):
+    sampleno = serializers.ReadOnlyField(source='dp030gkey.sampleno')
+    sample_stylename = serializers.ReadOnlyField(source='dp030gkey.stylename')
+    details_dp033 = Dp033Serializer(many=True, read_only=True)
+
+    class Meta:
+        model = Dp031
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'dp030gkey': {'required': False}
+        }
 
 
 class Dp032Serializer(serializers.ModelSerializer):
     partgroup_name = serializers.ReadOnlyField(source='dp005gkey.epartgroup')
     
+    clrcode1 = serializers.SerializerMethodField()
+    clrcode2 = serializers.SerializerMethodField()
+    clrcode3 = serializers.SerializerMethodField()
+    clrcode4 = serializers.SerializerMethodField()
+    
+    mstkno1 = serializers.SerializerMethodField()
+    mstkno2 = serializers.SerializerMethodField()
+    mstkno3 = serializers.SerializerMethodField()
+    mstkno4 = serializers.SerializerMethodField()
+    
+    supplierno1 = serializers.SerializerMethodField()
+    supplierno2 = serializers.SerializerMethodField()
+    supplierno3 = serializers.SerializerMethodField()
+    supplierno4 = serializers.SerializerMethodField()
+    
+    shortname1 = serializers.SerializerMethodField()
+    shortname2 = serializers.SerializerMethodField()
+    shortname3 = serializers.SerializerMethodField()
+    shortname4 = serializers.SerializerMethodField()
+
     class Meta:
         model = Dp032
         fields = '__all__'
-        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'dp030gkey': {'required': False}
+        }
+
+    def _get_mr010_code(self, gkey):
+        if not gkey: return None
+        colors = {
+            "clr_gkey_1": "01",
+            "clr_gkey_2": "02",
+            "clr_gkey_3": "03",
+            "clr_gkey_4": "04",
+            "clr_gkey_5": "05",
+        }
+        return colors.get(gkey)
+
+    def _get_mr035_mstkno(self, gkey):
+        if not gkey: return None
+        materials = {
+            "mat_gkey_1": "MAT-001",
+            "mat_gkey_2": "MAT-002",
+            "mat_gkey_3": "MAT-003",
+            "mat_gkey_4": "MAT-004",
+            "mat_gkey_5": "MAT-005",
+        }
+        return materials.get(gkey)
+
+    def _get_ba015_info(self, gkey):
+        if not gkey: return None, None
+        try:
+            supplier = Ba015.objects.get(gkey=gkey)
+            return supplier.factno, supplier.shortname
+        except Ba015.DoesNotExist:
+            return None, None
+
+    def get_clrcode1(self, obj): return self._get_mr010_code(obj.mr010gkey1)
+    def get_clrcode2(self, obj): return self._get_mr010_code(obj.mr010gkey2)
+    def get_clrcode3(self, obj): return self._get_mr010_code(obj.mr010gkey3)
+    def get_clrcode4(self, obj): return self._get_mr010_code(obj.mr010gkey4)
+
+    def get_mstkno1(self, obj): return self._get_mr035_mstkno(obj.mr035gkey1)
+    def get_mstkno2(self, obj): return self._get_mr035_mstkno(obj.mr035gkey2)
+    def get_mstkno3(self, obj): return self._get_mr035_mstkno(obj.mr035gkey3)
+    def get_mstkno4(self, obj): return self._get_mr035_mstkno(obj.mr035gkey4)
+
+    def get_supplierno1(self, obj): return self._get_ba015_info(obj.ba015gkey1)[0]
+    def get_supplierno2(self, obj): return self._get_ba015_info(obj.ba015gkey2)[0]
+    def get_supplierno3(self, obj): return self._get_ba015_info(obj.ba015gkey3)[0]
+    def get_supplierno4(self, obj): return self._get_ba015_info(obj.ba015gkey4)[0]
+
+    def get_shortname1(self, obj): return self._get_ba015_info(obj.ba015gkey1)[1]
+    def get_shortname2(self, obj): return self._get_ba015_info(obj.ba015gkey2)[1]
+    def get_shortname3(self, obj): return self._get_ba015_info(obj.ba015gkey3)[1]
+    def get_shortname4(self, obj): return self._get_ba015_info(obj.ba015gkey4)[1]
 
 
 class Dp034Serializer(serializers.ModelSerializer):
@@ -636,13 +721,13 @@ class Dp030Serializer(serializers.ModelSerializer):
     ba010_shortname = serializers.ReadOnlyField(source='ba010gkey.shortname')
     ba015_shortname = serializers.ReadOnlyField(source='ba015gkey.shortname')
     agent_shortname = serializers.ReadOnlyField(source='agentgkey.shortname')
-    ba009_brand = serializers.ReadOnlyField(source='ba009gkey.brand')
+    ba009_brand = serializers.ReadOnlyField(source='ba009gkey.cbrand')
     dp003_name = serializers.ReadOnlyField(source='dp003gkey.eshoetype')
     dp004_name = serializers.ReadOnlyField(source='dp004gkey.gender')
     dp010_lastno = serializers.ReadOnlyField(source='dp010gkey.lastno')
     dp015_bottomno = serializers.ReadOnlyField(source='dp015gkey.bottomno')
     dp020_heelno = serializers.ReadOnlyField(source='dp020gkey.heelno')
-    ba003_origin = serializers.ReadOnlyField(source='ba003gkey.origin')
+    ba003_origin = serializers.ReadOnlyField(source='ba003gkey.corigin')
     dp008_label = serializers.ReadOnlyField(source='dp008gkey.socklabel')
     mes101_englishname = serializers.ReadOnlyField(source='mes101gkey.englishname')
     aes101_englishname = serializers.ReadOnlyField(source='aes101gkey.englishname')
@@ -676,8 +761,9 @@ class Dp041Serializer(serializers.ModelSerializer):
     sample_no = serializers.ReadOnlyField(source='dp033gkey.dp030gkey.sampleno')
     req_custpairs = serializers.ReadOnlyField(source='dp033gkey.custpairs')
     req_keeppairs = serializers.ReadOnlyField(source='dp033gkey.keeppairs')
-    esampletype = serializers.ReadOnlyField(source='dp002gkey.esampletype')
-    brand_name = serializers.ReadOnlyField(source='dp033gkey.dp030gkey.ba009gkey.brand')
+    esampletype = serializers.ReadOnlyField(source='dp002gkey.samplename')
+    brand_name = serializers.ReadOnlyField(source='dp033gkey.dp030gkey.ba009gkey.cbrand')
+    bottom = serializers.ReadOnlyField(source='dp033gkey.dp031gkey.bottom')
 
     class Meta:
         model = Dp041
@@ -756,4 +842,109 @@ class Dp100Serializer(serializers.ModelSerializer):
             'gkey': {'required': False},
             'aes101gkey': {'required': False} # Allow implicit binding to current user
         }
+
+
+class PhraseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Phrase
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+
+class Mr002Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mr002
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+
+class Mr020Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mr020
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+
+class Mr025Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mr025
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+
+class Mr031Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mr031
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+
+# ===========================================================================
+# 資材部門管理系統 - MR015 / MR016 / MR030 Serializers
+# ===========================================================================
+
+class Mr015Serializer(serializers.ModelSerializer):
+    """材料大類設定 mr015"""
+    class Meta:
+        model = Mr015
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+    def validate_matno(self, value):
+        """材料大類代號不可重複"""
+        instance = getattr(self, 'instance', None)
+        qs = Mr015.objects.filter(matno=value)
+        if instance:
+            qs = qs.exclude(gkey=instance.gkey)
+        if qs.exists():
+            raise serializers.ValidationError(f"材料大類代號 '{value}' 已存在，不可重複。")
+        return value
+
+
+class Mr016Serializer(serializers.ModelSerializer):
+    """材料小類設定 mr016"""
+    # Read-only: display parent class info
+    mr015_matno = serializers.ReadOnlyField(source='mr015gkey.matno')
+    mr015_cname = serializers.ReadOnlyField(source='mr015gkey.cname')
+
+    class Meta:
+        model = Mr016
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'mr015gkey': {'required': True}
+        }
+
+    def validate(self, data):
+        """同一大類底下，小類代號不可重複"""
+        mr015gkey = data.get('mr015gkey') or getattr(getattr(self, 'instance', None), 'mr015gkey', None)
+        smatno = data.get('smatno')
+        if mr015gkey and smatno:
+            instance = getattr(self, 'instance', None)
+            qs = Mr016.objects.filter(mr015gkey=mr015gkey, smatno=smatno)
+            if instance:
+                qs = qs.exclude(gkey=instance.gkey)
+            if qs.exists():
+                raise serializers.ValidationError({"smatno": f"材料小類代號 '{smatno}' 在此大類下已存在，不可重複。"})
+        return data
+
+
+class Mr030Serializer(serializers.ModelSerializer):
+    """材料紋路設定 mr030"""
+    class Meta:
+        model = Mr030
+        fields = '__all__'
+        extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
+
+    def validate_veinno(self, value):
+        """紋路代號不可重複"""
+        instance = getattr(self, 'instance', None)
+        qs = Mr030.objects.filter(veinno=value)
+        if instance:
+            qs = qs.exclude(gkey=instance.gkey)
+        if qs.exists():
+            raise serializers.ValidationError(f"紋路代號 '{value}' 已存在，不可重複。")
+        return value
+
 

@@ -2,57 +2,64 @@ import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 import Dashboard from './views/Dashboard';
-import Ba001Sheet from './views/Ba001Sheet';
-import Ba002Sheet from './views/Ba002Sheet';
-import Ba003Sheet from './views/Ba003Sheet';
-import Ba004Sheet from './views/Ba004Sheet';
-import Ba005Sheet from './views/Ba005Sheet';
-import Ba009Sheet from './views/Ba009Sheet';
-import Ba010Sheet from './views/Ba010Sheet';
-import Ba015Sheet from './views/Ba015Sheet';
-import Ba020Sheet from './views/Ba020Sheet';
-import Ba025Sheet from './views/Ba025Sheet';
-import Ba030Sheet from './views/Ba030Sheet';
-import Ba040Sheet from './views/Ba040Sheet';
-import Ba045Sheet from './views/Ba045Sheet';
-import Ba050Sheet from './views/Ba050Sheet';
-import Ba055Sheet from './views/Ba055Sheet';
-import Ba060Sheet from './views/Ba060Sheet';
-import Ba061Sheet from './views/Ba061Sheet';
-import Ba065Sheet from './views/Ba065Sheet';
-import Ba070Sheet from './views/Ba070Sheet';
-import Ba075Sheet from './views/Ba075Sheet';
-import Ba080Sheet from './views/Ba080Sheet';
-import Ba085Sheet from './views/Ba085Sheet';
-import Ba090Sheet from './views/Ba090Sheet';
-import Ba091Sheet from './views/Ba091Sheet';
-import Es101Sheet from './views/Es101Sheet';
-import Ba092Sheet from './views/Ba092Sheet';
+import Ba001Sheet from './v2_views/Ba001Sheet';
+import Ba002Sheet from './v2_views/Ba002Sheet';
+import Ba003Sheet from './v2_views/Ba003Sheet';
+import Ba004Sheet from './v2_views/Ba004Sheet';
+import Ba005Sheet from './v2_views/Ba005Sheet';
+import Ba009Sheet from './v2_views/Ba009Sheet';
+import Ba010Sheet from './v2_views/Ba010Sheet';
+import Ba015Sheet from './v2_views/Ba015V2Sheet';
+import Ba020Sheet from './v2_views/Ba020Sheet';
+import Ba025V2Sheet from './v2_views/Ba025V2Sheet';
+import Ba030V2Sheet from './v2_views/Ba030V2Sheet';
+import Ba040Sheet from './v2_views/Ba040Sheet';
+import Ba045Sheet from './v2_views/Ba045Sheet';
+import Ba050Sheet from './v2_views/Ba050Sheet';
+import Ba055Sheet from './v2_views/Ba055Sheet';
+import Ba060Sheet from './v2_views/Ba060Sheet';
+import Ba061Sheet from './v2_views/Ba061Sheet';
+import Ba065Sheet from './v2_views/Ba065Sheet';
+import Ba070Sheet from './v2_views/Ba070Sheet';
+import Ba075Sheet from './v2_views/Ba075Sheet';
+import Ba080Sheet from './v2_views/Ba080Sheet';
+import Ba085Sheet from './v2_views/Ba085Sheet';
+import Ba090Sheet from './v2_views/Ba090Sheet';
+import Ba091Sheet from './v2_views/Ba091Sheet';
+import Es101V2Sheet from './v2_views/Es101V2Sheet';
+import Ba092Sheet from './v2_views/Ba092Sheet';
 import DpFlowMap from './components/DpFlowMap';
-import Dp001Sheet from './views/Dp001Sheet';
-import Dp002Sheet from './views/Dp002Sheet';
-import Dp003Sheet from './views/Dp003Sheet';
-import Dp004Sheet from './views/Dp004Sheet';
-import Dp005Sheet from './views/Dp005Sheet';
-import Dp006Sheet from './views/Dp006Sheet';
-import Dp008Sheet from './views/Dp008Sheet';
-import Dp009Sheet from './views/Dp009Sheet';
-import Dp007Sheet from './views/Dp007Sheet';
-import Dp020Sheet from './views/Dp020Sheet';
-import Dp015Sheet from './views/Dp015Sheet';
-import Dp010Sheet from './views/Dp010Sheet';
-import Dp023Sheet from './views/Dp023Sheet';
-import Dp025Sheet from './views/Dp025Sheet';
-import Dp030Sheet from './views/Dp030Sheet';
-import Dp032Sheet from './views/Dp032Sheet';
-import Dp035Sheet from './views/Dp035Sheet';
-import Dp040Sheet from './views/Dp040Sheet';
-import Dp050Sheet from './views/Dp050Sheet';
+import Dp001Sheet from './v2_views/Dp001Sheet';
+import Dp002Sheet from './v2_views/Dp002Sheet';
+import Dp003Sheet from './v2_views/Dp003Sheet';
+import Dp004Sheet from './v2_views/Dp004Sheet';
+import Dp005Sheet from './v2_views/Dp005Sheet';
+import Dp006Sheet from './v2_views/Dp006Sheet';
+import Dp008Sheet from './v2_views/Dp008Sheet';
+import Dp009Sheet from './v2_views/Dp009Sheet';
+import Dp007Sheet from './v2_views/Dp007Sheet';
+import Dp020Sheet from './v2_views/Dp020Sheet';
+import Dp015Sheet from './v2_views/Dp015Sheet';
+import Dp010Sheet from './v2_views/Dp010Sheet';
+import Dp023Sheet from './v2_views/Dp023Sheet';
+import Dp025Sheet from './v2_views/Dp025Sheet';
+import Dp030Sheet from './v2_views/Dp030Sheet';
+import Dp032Sheet from './v2_views/Dp032Sheet';
+import Dp035Sheet from './v2_views/Dp035Sheet';
+import Dp040Sheet from './v2_views/Dp040Sheet';
+import Dp050Sheet from './v2_views/Dp050Sheet';
 import Dp055Sheet from './views/Dp055Sheet';
 import Dp080Sheet from './views/Dp080Sheet';
 import Dp100Sheet from './views/Dp100Sheet';
 import Dp060Sheet from './views/Dp060Sheet';
 import Dp065Sheet from './views/Dp065Sheet';
+
+import Mr001Sheet from './v2_views/Mr001Sheet';
+import Mr002Sheet from './v2_views/Mr002Sheet';
+import Mr020Sheet from './v2_views/Mr020Sheet';
+import Mr025Sheet from './v2_views/Mr025Sheet';
+import Mr031Sheet from './v2_views/Mr031Sheet';
+
 import Dp070Sheet from './views/Dp070Sheet';
 import Dp095Sheet from './views/Dp095Sheet';
 
@@ -83,7 +90,7 @@ function App() {
   // 開啟新視窗 (動態 Singleton 路由機制)
   const handleOpenSheet = (sheetId, sheetLabel, params = {}) => {
     const finalLabel = sheetLabel || getMockLabel(sheetId);
-    
+
     // 檢查是否已經開過這個分頁
     const exists = tabs.find(t => t.id === sheetId);
     if (exists) {
@@ -143,8 +150,8 @@ function App() {
   return (
     <div className={`win32-desktop ${isSidebarCollapsed ? 'collapsed-sidebar' : ''}`}>
       {/* Top Navbar - 現在傳遞全域物理按鈕指令委託 */}
-      <Navbar 
-        onNavigate={() => setActiveTabId('navigation')} 
+      <Navbar
+        onNavigate={() => setActiveTabId('navigation')}
         onDispatchCommand={handleDispatchCommand}
         activeTabId={activeTabId}
         isSidebarCollapsed={isSidebarCollapsed}
@@ -157,8 +164,8 @@ function App() {
         <Sidebar onSelectNode={handleOpenSheet} activeNode={activeTabId} />
 
         {/* 🚀 底層邊緣懸浮切換鈕 (Floating Edge Toggle) */}
-        <div 
-          className="sidebar-edge-toggle" 
+        <div
+          className="sidebar-edge-toggle"
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           title={isSidebarCollapsed ? "展開側欄" : "隱藏側欄"}
         >
@@ -167,12 +174,12 @@ function App() {
 
         {/* Right: Unified Workspace with Modern Tab-Strip */}
         <main className="win32-workspace-area">
-          
+
           {/* 🏷️ 物理復刻分頁條 Tab Strip */}
           <div className="mdi-tab-strip">
             {tabs.map(tab => (
-              <div 
-                key={tab.id} 
+              <div
+                key={tab.id}
                 className={`mdi-tab-item ${activeTabId === tab.id ? 'active' : ''}`}
                 onClick={() => setActiveTabId(tab.id)}
               >
@@ -246,6 +253,16 @@ function App() {
               <Dp065Sheet />
             ) : activeTabId === 'dp070' ? (
               <Dp070Sheet />
+            ) : activeTabId === 'mr001' ? (
+              <Mr001Sheet />
+            ) : activeTabId === 'mr002' ? (
+              <Mr002Sheet />
+            ) : activeTabId === 'mr020' ? (
+              <Mr020Sheet />
+            ) : activeTabId === 'mr025' ? (
+              <Mr025Sheet />
+            ) : activeTabId === 'mr031' ? (
+              <Mr031Sheet />
             ) : activeTabId === 'ba001' ? (
               <Ba001Sheet />
             ) : activeTabId === 'ba002' ? (
@@ -265,9 +282,9 @@ function App() {
             ) : activeTabId === 'ba020' ? (
               <Ba020Sheet />
             ) : activeTabId === 'ba025' ? (
-              <Ba025Sheet />
+              <Ba025V2Sheet />
             ) : activeTabId === 'ba030' ? (
-              <Ba030Sheet />
+              <Ba030V2Sheet />
             ) : activeTabId === 'ba040' ? (
               <Ba040Sheet />
             ) : activeTabId === 'ba045' ? (
@@ -297,9 +314,9 @@ function App() {
             ) : activeTabId === 'ba092' ? (
               <Ba092Sheet />
             ) : activeTabId === 'es101' ? (
-              <Es101Sheet />
+              <Es101V2Sheet />
             ) : (
-              <div style={{ 
+              <div style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 height: '100%', width: '100%', gap: '16px', color: 'var(--text-muted)',
                 backgroundColor: 'var(--app-bg-panel)', borderRadius: 'var(--border-radius-lg)',
@@ -312,10 +329,10 @@ function App() {
                 <p style={{ fontSize: '14px', margin: 0 }}>
                   系統作業代號 [{activeTabId.toUpperCase()}] 正在努力還原中...
                 </p>
-                <button 
+                <button
                   className="modern-btn"
                   style={{ height: '36px', padding: '0 20px', marginTop: '8px', borderRadius: 'var(--border-radius-md)' }}
-                  onClick={() => handleCloseTab({ stopPropagation: () => {} }, activeTabId)}
+                  onClick={() => handleCloseTab({ stopPropagation: () => { } }, activeTabId)}
                 >
                   關閉此頁面
                 </button>
@@ -370,7 +387,7 @@ function getMockLabel(id) {
     'ba091': '運輸方式設定',
     'ba092': '單位設定',
     'es101': '員工資料管理',
-    
+
     // 🚀 開發部門管理系統 (Product Development)
     'dp001': '開發片語字庫',
     'dp002': '樣品類別設定',
@@ -398,7 +415,12 @@ function getMockLabel(id) {
     'dp065': '樣品生命週期轉化查詢',
     'dp070': '季節款數開發統計查詢',
     'dp095': '確認樣管制系統',
-    'dp100': '開發費用轉嫁管理'
+    'dp100': '開發費用轉嫁管理',
+    'mr001': '資材片語字庫設定',
+    'mr002': '顏色大類設定',
+    'mr020': '材料厚度設定',
+    'mr025': '材料幅度設定',
+    'mr031': '加工方式設定'
   };
   return labels[id] || `作業 [${id.toUpperCase()}]`;
 }

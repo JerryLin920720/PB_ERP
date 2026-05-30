@@ -24,8 +24,32 @@ const getFullUrl = (path) => {
 const parseDrfError = (err, fieldLabels = {}) => {
   if (err && err.response && err.response.data) {
     const data = err.response.data;
-    if (typeof data === 'string') return data;
-    if (data.detail && typeof data.detail === 'string') return data.detail;
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase();
+      if (
+        lower.includes('<!doctype html>') ||
+        lower.includes('<html') ||
+        lower.includes('traceback') ||
+        lower.includes('integrityerror')
+      ) {
+        console.error('Server error page / Traceback details:', data);
+        return '伺服器發生錯誤，請檢查後端日誌或聯絡系統管理員。';
+      }
+      return data;
+    }
+    if (data.detail && typeof data.detail === 'string') {
+      const lower = data.detail.toLowerCase();
+      if (
+        lower.includes('<!doctype html>') ||
+        lower.includes('<html') ||
+        lower.includes('traceback') ||
+        lower.includes('integrityerror')
+      ) {
+        console.error('Server error page / Traceback details:', data.detail);
+        return '伺服器發生錯誤，請檢查後端日誌或聯絡系統管理員。';
+      }
+      return data.detail;
+    }
 
     const translateMsgOnly = (msg) => {
       if (typeof msg === 'object' && msg !== null) {
@@ -165,7 +189,14 @@ export default function useMasterDetailCrud({
   onRetrieve,
   onInsertMaster,
   onInsertDetail,
-  afterSave
+  afterSave,
+  masterColumns,
+  detailColumns,
+  validateMasterRow,
+  validateDetailRow,
+  validateAll,
+  disableDetailAddAction = false,
+  saveAllOverride
 }) {
   const [masterRows, setMasterRows] = useState([]);
   const [detailRows, setDetailRows] = useState([]);
@@ -250,18 +281,43 @@ export default function useMasterDetailCrud({
   // 2. 預設讀取明細資料
   const fetchDetail = async (parentGkey, { manageLoading = true } = {}) => {
     if (!detailApiUrl || !parentGkey) return;
-    // 臨時新增的主檔尚無後端明細，直接清空明細
+    
+    // 1. 如果是臨時主檔，從 editedDetails 中找出屬於該主檔的明細列
     if (typeof parentGkey === 'string' && parentGkey.startsWith('temp_')) {
-      setDetailRows([]);
+      const tempRows = Object.values(editedDetails).filter(
+        d => d[detailParentKey] === parentGkey
+      );
+      setDetailRows(tempRows);
       return;
     }
+    
     if (manageLoading) setLoading(true);
     try {
       const res = await axios.get(`${getFullUrl(detailApiUrl)}?${detailParentKey}=${parentGkey}`);
-      setDetailRows(res.data || []);
-      // 僅清除明細的編輯快取 (保留主檔)
-      setEditedDetails({});
-      setDeletedDetailKeys([]);
+      const allServerRows = res.data || [];
+      // 前端過濾：防範後端 API 未實作外鍵查詢過濾，只保留所選主檔對應的明細列
+      const serverRows = allServerRows.filter(r => String(r[detailParentKey]) === String(parentGkey));
+      
+      // 合併 editedDetails 中的最新修改，並過濾掉已刪除的明細
+      const mergedRows = serverRows
+        .filter(r => !deletedDetailKeys.includes(r[detailKey]))
+        .map(r => {
+          const edited = editedDetails[r[detailKey]];
+          return edited ? { ...r, ...edited } : r;
+        });
+        
+      // 找出屬於該主檔的臨時新增明細（如果有）
+      const tempDetailsForParent = Object.values(editedDetails).filter(
+        d => d[detailParentKey] === parentGkey && typeof d[detailKey] === 'string' && d[detailKey].startsWith('temp_')
+      );
+      
+      // 合併臨時明細
+      const finalRows = [...mergedRows, ...tempDetailsForParent];
+      
+      // 依序號排序以保持正確顯示
+      finalRows.sort((a, b) => (Number(a.serialno) || 0) - (Number(b.serialno) || 0));
+      
+      setDetailRows(finalRows);
       setSelectedDetail(null);
     } catch (err) {
       console.error('Fetch detail failed:', err);
@@ -276,11 +332,11 @@ export default function useMasterDetailCrud({
     setSelectedMaster(row);
     setSelectedDetail(null);
     setActiveArea('master');
+    // 立即清空明細資料，避免顯示舊主檔的明細（避免混淆與 race condition）
+    setDetailRows([]);
     if (row) {
       const keyVal = row[masterKey];
       fetchDetail(keyVal);
-    } else {
-      setDetailRows([]);
     }
   };
 
@@ -311,6 +367,10 @@ export default function useMasterDetailCrud({
 
   // 5. 新增明細列 (不再依賴傳入 createDefaultRow 函數，直接調用 config 的產生器)
   const handleAddDetail = () => {
+    if (disableDetailAddAction) {
+      message.info('明細由主檔尺碼範圍自動產生，請調整主檔尺碼欄位。');
+      return;
+    }
     if (typeof onInsertDetail === 'function') {
       onInsertDetail();
       return;
@@ -490,22 +550,144 @@ export default function useMasterDetailCrud({
 
   // 11. 合併儲存 (前端編排一鍵儲存主從)
   const handleSaveAll = async () => {
-    // 檢查明細關聯防呆
+    setLoading(true);
     const detailList = Object.values(editedDetails);
-    for (const detailRow of detailList) {
-      const dKey = detailRow[detailKey];
-      // 排除已在暫存刪除名單中的資料
-      if (deletedDetailKeys.includes(dKey)) {
-        continue;
+
+    // ==========================================
+    // Pre-Save Validation Phase
+    // ==========================================
+    try {
+      // 1. Validate Master required fields & custom validateMasterRow
+      const masterEditedList = Object.values(editedMasters);
+      for (const mRow of masterEditedList) {
+        const mKeyVal = mRow[masterKey];
+        if (deletedMasterKeys.includes(mKeyVal)) {
+          continue; // Skip if scheduled for deletion
+        }
+
+        // Required check
+        if (masterColumns) {
+          for (const col of masterColumns) {
+            if (col.required) {
+              const val = mRow[col.key];
+              if (val === undefined || val === null || val === '') {
+                const label = col.label || fieldLabels[col.key] || col.key;
+                throw new Error(`主檔欄位「${label}」為必填項目`);
+              }
+            }
+          }
+        }
+
+        // Custom validation callback
+        if (typeof validateMasterRow === 'function') {
+          validateMasterRow(mRow);
+        }
+
+        // Dry-run payload check to verify buildMasterPayload doesn't throw
+        if (typeof buildMasterPayload === 'function') {
+          buildMasterPayload(mRow);
+        }
       }
-      const parentKeyVal = detailRow[detailParentKey] || (selectedMaster ? selectedMaster[masterKey] : null);
-      if (parentKeyVal === undefined || parentKeyVal === null || parentKeyVal === '') {
-        message.error('明細資料缺少主檔關聯，無法儲存。');
-        return;
+
+      // 2. Validate Detail required fields & custom validateDetailRow
+      for (const dRow of detailList) {
+        const dKeyVal = dRow[detailKey];
+        if (deletedDetailKeys.includes(dKeyVal)) {
+          continue; // Skip if scheduled for deletion
+        }
+
+        const parentKeyVal = dRow[detailParentKey] || (selectedMaster ? selectedMaster[masterKey] : null);
+        // If parent master is deleted, skip validation
+        if (parentKeyVal && deletedMasterKeys.includes(parentKeyVal)) {
+          continue;
+        }
+
+        // Relation check: parent must exist
+        if (parentKeyVal === undefined || parentKeyVal === null || parentKeyVal === '') {
+          throw new Error('明細資料缺少主檔關聯，無法儲存。');
+        }
+
+        // Required check
+        if (detailColumns) {
+          for (const col of detailColumns) {
+            if (col.required) {
+              const val = dRow[col.key];
+              if (val === undefined || val === null || val === '') {
+                const label = col.label || fieldLabels[col.key] || col.key;
+                throw new Error(`明細欄位「${label}」為必填項目`);
+              }
+            }
+          }
+        }
+
+        // Custom validation callback
+        if (typeof validateDetailRow === 'function') {
+          validateDetailRow(dRow);
+        }
+
+        // Dry-run payload check to verify buildDetailPayload doesn't throw
+        if (typeof buildDetailPayload === 'function') {
+          buildDetailPayload(dRow, {});
+        }
       }
+
+      // 3. Custom validateAll callback
+      if (typeof validateAll === 'function') {
+        validateAll({
+          masterRows,
+          detailRows,
+          editedMasters,
+          editedDetails,
+          deletedMasterKeys,
+          deletedDetailKeys
+        });
+      }
+    } catch (valErr) {
+      console.warn('[useMasterDetailCrud] Pre-Save validation failed:', valErr);
+      message.error(valErr.message || '存檔校驗未通過');
+      setLoading(false);
+      return;
     }
 
-    setLoading(true);
+    // 支援自訂儲存策略（saveAllOverride）
+    if (typeof saveAllOverride === 'function') {
+      try {
+        await saveAllOverride({
+          masterRows,
+          detailRows,
+          editedMasters,
+          editedDetails,
+          deletedMasterKeys,
+          deletedDetailKeys,
+          selectedMaster,
+          axios,
+          getFullUrl,
+          clearDirtyState,
+          fetchMaster
+        });
+        message.success('主從資料儲存成功！');
+        
+        clearDirtyState();
+        setIsEditing(false);
+
+        if (typeof afterSave === 'function') {
+          await afterSave();
+        }
+
+        if (typeof onRetrieve === 'function') {
+          await onRetrieve();
+        } else {
+          await fetchMaster();
+        }
+      } catch (err) {
+        console.error('Save all override failed:', err);
+        message.error('儲存失敗：' + parseDrfError(err, fieldLabels));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       // 1) 物理刪除明細
       for (const dKey of deletedDetailKeys) {
@@ -627,6 +809,69 @@ export default function useMasterDetailCrud({
     }
   };
 
+  // 11b. replaceDetailRows — 批次取代 detail rows（通用，不清 master 狀態）
+  //   newRows        : 新的 detail rows 完整陣列
+  //   markDirty=true : 是否將所有新 rows 加入 editedDetails 髒標記
+  const replaceDetailRows = (newRows, { markDirty = true } = {}) => {
+    if (!selectedMaster) return;
+    const currentParentKeyVal = selectedMaster[masterKey];
+    
+    // 過濾出屬於目前主檔的 rows，防範混入其他主檔的明細
+    const filteredRows = newRows.filter(row => row[detailParentKey] === currentParentKeyVal);
+    
+    setDetailRows(filteredRows);
+    if (markDirty) {
+      const dirtyMap = {};
+      filteredRows.forEach(row => {
+        const k = row[detailKey];
+        if (k !== undefined && k !== null) {
+          dirtyMap[k] = row;
+        }
+      });
+      setEditedDetails(prev => ({ ...prev, ...dirtyMap }));
+      setIsEditing(true);
+    }
+    setActiveArea('detail');
+  };
+
+  // 11c. updateDetailRows — 以 updater function 更新 detail rows
+  //   updater   : (prevRows: Array) => Array
+  //   markDirty : 是否清 editedDetails（預設不標記，由呼叫端自行決定）
+  const updateDetailRows = (updater, { markDirty = false } = {}) => {
+    setDetailRows(prev => {
+      const next = updater(prev);
+      if (markDirty) {
+        const dirtyMap = {};
+        next.forEach(row => {
+          const k = row[detailKey];
+          if (k !== undefined && k !== null) {
+            dirtyMap[k] = row;
+          }
+        });
+        setEditedDetails(prevEdited => ({ ...prevEdited, ...dirtyMap }));
+        setIsEditing(true);
+      }
+      return next;
+    });
+  };
+
+  // 11d. markDetailRowsDirty — 將指定 rows 加入 editedDetails 髒標記
+  //   rows : Array of detail row objects（需包含 detailKey 欄位）
+  const markDetailRowsDirty = (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    setEditedDetails(prev => {
+      const next = { ...prev };
+      rows.forEach(row => {
+        const k = row[detailKey];
+        if (k !== undefined && k !== null) {
+          next[k] = row;
+        }
+      });
+      return next;
+    });
+    setIsEditing(true);
+  };
+
   // 12. 透過 Ref 封裝 callback 以免事件監聽器發生過期閉包
   const opsRef = useRef({});
   useEffect(() => {
@@ -664,7 +909,11 @@ export default function useMasterDetailCrud({
             break;
           case 'insert':
             if (ops.activeArea === 'detail') {
-              ops.handleAddDetail();
+              if (disableDetailAddAction) {
+                message.info('明細由主檔尺碼範圍自動產生，請調整主檔尺碼欄位。');
+              } else {
+                ops.handleAddDetail();
+              }
             } else {
               ops.handleAddMaster();
             }
@@ -736,6 +985,11 @@ export default function useMasterDetailCrud({
     confirmDeleteMaster,
     confirmDeleteDetail,
     handleCancel,
-    handleSaveAll
+    handleSaveAll,
+
+    // 通用 detail rows 操作方法（供需要程式化更新 detail 的 Sheet 使用，如 DP004）
+    replaceDetailRows,
+    updateDetailRows,
+    markDetailRowsDirty
   };
 }

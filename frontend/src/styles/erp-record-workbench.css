@@ -1,0 +1,476 @@
+/* ============================================================
+   erp-record-workbench.css
+   RecordWorkbenchSheet — Layout & PB Compact Style System
+   ============================================================ */
+
+/* ── Page Root ─────────────────────────────────────────────── */
+.erp-rw-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: #f0f2f5;
+  /* PB compact: 12px baseline font */
+  font-size: 12px;
+}
+
+/* Apply compact density to entire page tree */
+.erp-rw-page,
+.erp-rw-page * {
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+/* ── Top Tabs (查詢列表 / 編輯維護) ──────────────────────────── */
+.erp-rw-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-rw-tabs > .ant-tabs-nav {
+  margin-bottom: 0 !important;
+  background: #ffffff;
+  padding: 0 12px;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+.erp-rw-tabs > .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.erp-rw-tabs .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── List Mode Layout ───────────────────────────────────────── */
+.erp-rw-list-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 6px 8px;
+  gap: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Query Panel ────────────────────────────────────────────── */
+.erp-rw-query-panel {
+  background: #ffffff;
+  padding: 8px 10px 4px;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Specific high density overrides for query panel fields */
+.erp-rw-query-panel .ant-form-item {
+  margin-bottom: 4px !important;
+}
+
+.erp-rw-query-panel .ant-form-item-label {
+  padding-bottom: 0px !important;
+}
+
+.erp-rw-query-panel .ant-form-item-label > label {
+  height: 18px !important;
+  line-height: 18px !important;
+}
+
+/* Right-panel radio/checkbox group box in query area */
+.erp-rw-query-right-panel {
+  border: 1px solid #d9d9d9;
+  padding: 6px 10px;
+  background: #fafafa;
+  height: auto;
+  border-radius: 2px;
+}
+
+.erp-rw-query-right-panel-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #262626;
+}
+
+/* ── List Grid ──────────────────────────────────────────────── */
+.erp-rw-list-grid {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  min-height: 300px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ── Edit Mode Layout ───────────────────────────────────────── */
+.erp-rw-edit-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.erp-rw-editor {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #f0f2f5;
+  gap: 0;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────── */
+.erp-rw-sidebar {
+  width: 200px;
+  border-right: 1px solid #d9d9d9;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #fafafa;
+  min-height: 0;
+}
+
+.erp-rw-sidebar-header {
+  padding: 6px 10px;
+  background: #e6f7ff;
+  font-weight: 700;
+  border-bottom: 1px solid #d9d9d9;
+  color: #002766;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.erp-rw-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.erp-rw-sidebar-item {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.erp-rw-sidebar-item:hover {
+  background: #f0f5ff;
+}
+
+.erp-rw-sidebar-item.active {
+  background: #e6f7ff;
+  border-right: 3px solid #1890ff;
+  font-weight: 700;
+  color: #003a8c;
+}
+
+.erp-rw-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  gap: 6px;
+  overflow: hidden;
+  background: #f0f2f5;
+}
+
+/* ── Master Form Container ──────────────────────────────────── */
+.erp-rw-master-form {
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Section header — PB blue bar above form groups */
+.erp-rw-section-header {
+  background: #e6f7ff;
+  border-bottom: 1px solid #bae7ff;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+  color: #002766;
+}
+
+/* Form body padding */
+.erp-rw-master-form-body {
+  padding: 8px 10px 4px;
+}
+
+/* ── Detail Tabs Area ───────────────────────────────────────── */
+.erp-rw-detail-tabs {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.erp-rw-detail-tabs .ant-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.erp-rw-detail-tabs .ant-tabs-nav {
+  margin-bottom: 0 !important;
+  background: #fafafa;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+.erp-rw-detail-tabs .ant-tabs-tab {
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  margin: 0 !important;
+}
+
+.erp-rw-detail-tabs .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.erp-rw-detail-tabs .ant-tabs-content {
+  height: 100%;
+  min-height: 0;
+}
+
+.erp-rw-detail-tabs .ant-tabs-tabpane {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Compact Input/Select/Form overrides (PB style) ─────────── */
+/* Applies to all inputs inside the workbench page */
+.erp-rw-page .ant-form-item {
+  margin-bottom: 6px !important;
+}
+
+.erp-rw-page .ant-form-item-label {
+  padding-bottom: 1px !important;
+}
+
+.erp-rw-page .ant-form-item-label > label {
+  font-size: 12px !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  color: #595959;
+}
+
+.erp-rw-page .ant-input,
+.erp-rw-page .ant-input-number,
+.erp-rw-page .ant-input-number-input {
+  font-size: 12px !important;
+  height: 24px !important;
+  line-height: 22px !important;
+  padding: 1px 7px !important;
+}
+
+.erp-rw-page .ant-input[type="date"] {
+  height: 24px !important;
+  font-size: 12px !important;
+  padding: 1px 6px !important;
+}
+
+.erp-rw-page .ant-select,
+.erp-rw-page .ant-select-selector {
+  height: 24px !important;
+  font-size: 12px !important;
+}
+
+.erp-rw-page .ant-select-selector {
+  padding: 0 7px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.erp-rw-page .ant-select-selection-item,
+.erp-rw-page .ant-select-selection-placeholder {
+  line-height: 22px !important;
+  font-size: 12px !important;
+}
+
+.erp-rw-page .ant-checkbox-wrapper {
+  font-size: 12px !important;
+}
+
+.erp-rw-page .ant-radio-wrapper {
+  font-size: 12px !important;
+}
+
+.erp-rw-page .ant-input-number-group-wrapper {
+  height: 24px !important;
+}
+
+/* ── Table overrides (PB dense table) ───────────────────────── */
+.erp-rw-page .ant-table-thead > tr > th {
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  height: 26px !important;
+  background-color: #fafafa !important;
+  font-weight: 700 !important;
+  color: #262626 !important;
+  border-bottom: 1px solid #d9d9d9 !important;
+  border-right: 1px solid #f0f0f0 !important;
+}
+
+.erp-rw-page .ant-table-tbody > tr:not(.ant-table-measure-row) > td {
+  font-size: 12px !important;
+  padding: 3px 6px !important;
+  height: 26px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.erp-rw-page .row-active td {
+  background-color: #e6f7ff !important;
+  border-bottom: 2px solid #1890ff !important;
+}
+
+/* ── Status bar ─────────────────────────────────────────────── */
+.erp-rw-statusbar {
+  height: 22px;
+  background: #fafafa;
+  border-top: 1px solid #d9d9d9;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  color: #8c8c8c;
+  flex-shrink: 0;
+}
+
+/* ── DP025 & DP030 & DP040 main scroll behavior ────────────────────────── */
+.erp-rw-main.dp025-main-scroll,
+.erp-rw-main.dp030-main-scroll,
+.erp-rw-main.dp040-main-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+}
+
+.erp-rw-main.dp025-main-scroll .erp-rw-master-form,
+.erp-rw-main.dp030-main-scroll .erp-rw-master-form,
+.erp-rw-main.dp040-main-scroll .erp-rw-master-form {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.erp-rw-main.dp025-main-scroll .erp-rw-detail-tabs,
+.erp-rw-main.dp030-main-scroll .erp-rw-detail-tabs,
+.erp-rw-main.dp040-main-scroll .erp-rw-detail-tabs {
+  flex-shrink: 0;
+  min-height: 520px;
+}
+
+/* Remove nested scrolling from master forms inside scrolled main areas */
+.erp-rw-main.dp025-main-scroll .erp-rw-master-form-body,
+.erp-rw-main.dp025-main-scroll .dp025-master-form,
+.erp-rw-main.dp030-main-scroll .erp-rw-master-form-body,
+.erp-rw-main.dp030-main-scroll .dp030-master-form,
+.erp-rw-main.dp040-main-scroll .erp-rw-master-form-body,
+.erp-rw-main.dp040-main-scroll .dp040-master-form {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
+}
+
+/* DP040 master form compact layout */
+.dp040-master-form .ant-form-item {
+  margin-bottom: 4px !important;
+}
+
+.dp040-master-form .ant-form-item-label {
+  padding-bottom: 0 !important;
+  line-height: 18px !important;
+}
+
+.dp040-master-form .ant-input,
+.dp040-master-form .ant-select-selector,
+.dp040-master-form .ant-picker,
+.dp040-master-form .ant-input-number {
+  height: 24px !important;
+  min-height: 24px !important;
+  font-size: 12px !important;
+}
+
+/* DP030 master form specific layout / compact overrides */
+.dp030-master-form .ant-form-item {
+  margin-bottom: 4px !important;
+}
+
+.dp030-master-form .ant-form-item-label {
+  padding-bottom: 0 !important;
+  line-height: 18px !important;
+}
+
+.dp030-master-form .ant-input,
+.dp030-master-form .ant-select-selector,
+.dp030-master-form .ant-picker,
+.dp030-master-form .ant-input-number {
+  height: 24px !important;
+  min-height: 24px !important;
+}
+
+.dp030-master-form .ant-input,
+.dp030-master-form .ant-select,
+.dp030-master-form .ant-picker,
+.dp030-master-form .ant-input-number {
+  font-size: 12px !important;
+}
+
+/* ── DP040 Specific layout rules ────────────────────────── */
+.dp040-sample-tab {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dp040-sample-tab .ant-table-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.dp040-packing-tab {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.dp040-packing-left,
+.dp040-packing-right {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dp040-packing-left .ant-table-wrapper,
+.dp040-packing-right .ant-table-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+
