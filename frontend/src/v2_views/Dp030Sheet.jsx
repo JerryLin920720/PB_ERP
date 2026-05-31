@@ -879,6 +879,7 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
       { title: <span title="PB: LastNo">楦頭編號</span>, dataIndex: 'dp010_lastno', width: 120 },
       { title: <span title="PB: OutsoleNo">大底編號</span>, dataIndex: 'dp015_bottomno', width: 120 },
       { title: <span title="PB: HeelNo">鞋跟編號</span>, dataIndex: 'dp020_heelno', width: 120 },
+      { title: <span title="PB: Group">組別</span>, dataIndex: 'groupname', width: 100 },
       { title: <span title="PB: Size">尺碼範圍</span>, dataIndex: 'size', width: 100 },
       { title: <span title="PB: RqstBy">要樣者</span>, dataIndex: 'rqstby', width: 100 },
       { title: <span title="PB: Designer">設計師</span>, dataIndex: 'designer', width: 100 }
@@ -921,6 +922,7 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
       'ba010_shortname', 'ba015_shortname', 'ba010_custno', 'ba015_factno',
       'es101_englishname', 'es101_englishname1', 'es101_englishname2',
       'dp010_lastno', 'dp015_bottomno', 'dp020_heelno', 'dp023_groupname',
+      'groupname',
       'ba009_brand', 'ba003_origin', 'dp008_label',
       'mes101_englishname', 'aes101_englishname', 'aba060_code', 'agent_shortname'
     ];
@@ -930,8 +932,17 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
     if (cleanMaster.styleno) {
       cleanMaster.styleno = cleanMaster.styleno.toUpperCase().trim();
     }
-    if (cleanMaster.sampleno) {
-      cleanMaster.sampleno = cleanMaster.sampleno.toUpperCase().trim();
+    const rawSampleNo = String(cleanMaster.sampleno || '').trim();
+    if (
+      !rawSampleNo ||
+      rawSampleNo === '自動產生' ||
+      rawSampleNo === 'AUTO' ||
+      rawSampleNo === 'auto' ||
+      rawSampleNo === 'Auto'
+    ) {
+      delete cleanMaster.sampleno;
+    } else {
+      cleanMaster.sampleno = rawSampleNo.toUpperCase();
     }
 
     if (cleanMaster.gkey && String(cleanMaster.gkey).startsWith('temp_')) {

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
-  MonitorPlay, Map, Save, FileSpreadsheet, Printer, 
+  MonitorPlay, Save, FileSpreadsheet, Printer, 
   LogOut, PlusSquare, Trash2, CheckSquare, Search, Edit3,
   PanelLeftClose, PanelLeftOpen, RefreshCw, ArrowDownAZ, Filter
 } from 'lucide-react';
+import useAuth from '../auth/useAuth';
 import './Navbar.css';
 
 /**
@@ -16,6 +17,7 @@ export default function Navbar({
   isSidebarCollapsed,
   onToggleSidebar
 }) {
+  const { logout } = useAuth();
   const isSheetActive = activeTabId !== 'navigation';
   
   // 🛸 菜單下拉控制狀態
@@ -289,7 +291,7 @@ export default function Navbar({
         <div style={{ flex: 1 }} />
 
         {/* 系統登出 */}
-        <button className="toolbar-btn danger" title="安全登出">
+        <button className="toolbar-btn danger" title="安全登出" onClick={logout}>
           <div className="icon-frame"><LogOut size={16} color="#ef4444"/></div>
           <span className="btn-label">退出</span>
         </button>

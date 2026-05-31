@@ -733,6 +733,7 @@ class Dp030Serializer(serializers.ModelSerializer):
     aes101_englishname = serializers.ReadOnlyField(source='aes101gkey.englishname')
     es101_englishname = serializers.ReadOnlyField(source='es101gkey.englishname')
     dp023_groupname = serializers.ReadOnlyField(source='dp023gkey.groupname')
+    groupname = serializers.CharField(source='dp023gkey.groupname', read_only=True)
     aba060_code = serializers.ReadOnlyField(source='aba060gkey.currency')
 
     class Meta:

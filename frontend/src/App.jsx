@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 import Dashboard from './views/Dashboard';
@@ -62,13 +62,16 @@ import Mr031Sheet from './v2_views/Mr031Sheet';
 
 import Dp070Sheet from './views/Dp070Sheet';
 import Dp095Sheet from './views/Dp095Sheet';
-
-
-
+import { message } from 'antd';
 import { X } from 'lucide-react';
+import useAuth from './auth/useAuth';
+import LoginPage from './pages/LoginPage';
+import { canOpenProgram, inferPermissionKey } from './auth/permissionUtils';
 import './App.css';
 
 function App() {
+  const { isAuthenticated, isLoading, user, permissions } = useAuth();
+
   // ⭐️ MDI 多頁籤管理器狀態 (100% 復刻 C/S 原理)
   const [tabs, setTabs] = useState([
     { id: 'navigation', title: '系統導航', closable: false }
@@ -88,7 +91,20 @@ function App() {
   }, []);
 
   // 開啟新視窗 (動態 Singleton 路由機制)
-  const handleOpenSheet = (sheetId, sheetLabel, params = {}) => {
+  const handleOpenSheet = useCallback((sheetId, sheetLabel, params = {}) => {
+    // Route Guard check
+    if (sheetId && sheetId !== 'navigation') {
+      const permissionKey =
+        params?.permissionKey ||
+        params?.node?.permissionKey ||
+        inferPermissionKey(sheetId);
+
+      if (!canOpenProgram(permissions, permissionKey, user)) {
+        message.warning('對不起，您沒有此作業的存取權限。');
+        return;
+      }
+    }
+
     const finalLabel = sheetLabel || getMockLabel(sheetId);
 
     // 檢查是否已經開過這個分頁
@@ -110,16 +126,22 @@ function App() {
         }));
       }, 100);
     }
-  };
+  }, [tabs, permissions, user]);
 
   React.useEffect(() => {
     const handleOpenSheetEvent = (e) => {
-      const { sheetId, sheetLabel, params } = e.detail;
-      handleOpenSheet(sheetId, sheetLabel, params);
+      const { sheetId, id, code, sheetLabel, title, label, params } = e.detail;
+      const actualId = sheetId || id || code;
+      const actualLabel = sheetLabel || title || label;
+      const mergedParams = {
+        ...params,
+        permissionKey: e.detail.permissionKey || e.detail.node?.permissionKey || params?.permissionKey
+      };
+      handleOpenSheet(actualId, actualLabel, mergedParams);
     };
     window.addEventListener('mdi-open-sheet', handleOpenSheetEvent);
     return () => window.removeEventListener('mdi-open-sheet', handleOpenSheetEvent);
-  }, [tabs]);
+  }, [handleOpenSheet]);
 
   // 關閉分頁邏輯
   const handleCloseTab = (e, sheetId) => {
@@ -146,6 +168,31 @@ function App() {
     });
     window.dispatchEvent(event);
   };
+
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', width: '100vw', gap: '16px', color: '#6366f1',
+        backgroundColor: '#09090b', fontFamily: 'sans-serif'
+      }}>
+        <div style={{
+          width: '50px', height: '50px', border: '5px solid rgba(99, 102, 241, 0.1)',
+          borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin-loader 1s linear infinite'
+        }} />
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes spin-loader { to { transform: rotate(360deg); } }
+        `}} />
+        <h3 style={{ margin: 0, fontWeight: 600, color: '#f4f4f5' }}>ERP 系統安全通道載入中...</h3>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  const userRole = user?.privilege_class === '5' ? '管理員' : '一般使用者';
 
   return (
     <div className={`win32-desktop ${isSidebarCollapsed ? 'collapsed-sidebar' : ''}`}>
@@ -345,7 +392,7 @@ function App() {
       {/* Footer Status Bar (包含底層規範規定的實時時鐘更新) */}
       <footer className="win32-statusbar">
         <div className="status-panel section-left">就緒 | 當前焦點視窗: [{activeTabId.toUpperCase()}]</div>
-        <div className="status-panel">使用者: ADMIN (管理員)</div>
+        <div className="status-panel">使用者: {user?.display_name || user?.username} ({userRole})</div>
         <div className="status-panel">資料庫連線: PROD_DB (正常)</div>
         <div className="status-panel" style={{ fontWeight: '600', opacity: 0.7 }}>
           CAPS: OFF | NUM: ON

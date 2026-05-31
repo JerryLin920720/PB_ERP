@@ -274,6 +274,7 @@ function Dp050Result({ rows, setRows, loading, context, setContext }) {
       { title: '配色', dataIndex: 'color', width: 130, render: (_, row) => row.color || row.ecolor || '' },
       { title: '客戶', dataIndex: 'customer', width: 110 },
       { title: '工廠', dataIndex: 'factory', width: 110 },
+      { title: '組別', dataIndex: 'groupname', width: 100 },
       { title: '開單日期', dataIndex: 'issuedate', width: 110, render: (v) => (v ? String(v).slice(0, 10) : '') },
       {
         title: '狀態',

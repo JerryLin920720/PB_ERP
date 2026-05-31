@@ -99,4 +99,11 @@ urlpatterns = [
     path('health/', views.system_health, name='system_health'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard_stats'),
     path('dashboard/analytics/', views.dashboard_analytics, name='dashboard_analytics'),
+    
+    # 🔐 Authentication and Authorization Endpoints
+    path('auth/login/', views.auth_login, name='auth_login'),
+    path('auth/logout/', views.auth_logout, name='auth_logout'),
+    path('auth/me/', views.auth_me, name='auth_me'),
+    path('auth/permissions/', views.auth_permissions, name='auth_permissions'),
+    path('auth/menu/', views.auth_menu, name='auth_menu'),
 ]

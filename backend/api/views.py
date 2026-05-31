@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework import status, viewsets
 from django.db.models import Max
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from .models import (
     Ab230, Ab231,
     Ba001, Ba002, Ba003, Ba004, Ba005, Ba009, Ba010, Ba011, Ba012, Ba013, Ba014, Ba015, Ba016, Ba020, Ba040,
@@ -352,6 +352,100 @@ class Ba015ViewSet(viewsets.ModelViewSet):
         factno = self.request.data.get('factno', '').upper()
         serializer.save(factno=factno)
 
+    @action(detail=False, methods=['post'], url_path='deep_save')
+    def deep_save(self, request):
+        """
+        🚀 原子交易同步引擎：供應鏈實體 (工廠/材料商/供應商) + 聯絡窗口 (ba016) + 分廠 (ba015)
+        """
+        entity_type = request.query_params.get('type', '1')
+        data = request.data
+        master_data = data.get('master', {})
+        contacts_data = data.get('contacts', [])
+        branches_data = data.get('branches', [])
+
+        try:
+            with transaction.atomic():
+                # 1. 保存主實體 Ba015
+                master_gkey = master_data.get('gkey')
+                factno_upper = master_data.get('factno', '').upper()
+                
+                # 自動強制填入正確的 type 與大寫 factno
+                master_data['type'] = entity_type
+                master_data['factno'] = factno_upper
+
+                if master_gkey and not str(master_gkey).startswith('temp_'):
+                    instance = Ba015.objects.get(gkey=master_gkey)
+                    serializer = Ba015Serializer(instance, data=master_data, partial=True)
+                else:
+                    master_data.pop('gkey', None)
+                    serializer = Ba015Serializer(data=master_data)
+                
+                serializer.is_valid(raise_exception=True)
+                master_obj = serializer.save()
+
+                # 用於記錄臨時 gkey 與實際保存後 gkey 的對照關係，方便聯絡人關聯
+                gkey_map = {}
+                if master_gkey:
+                    gkey_map[master_gkey] = master_obj.gkey
+
+                # 2. 保存分廠 (僅當 entity_type == '1' 時有效)
+                saved_branch_gkeys = []
+                if entity_type == '1':
+                    for b_data in branches_data:
+                        b_gkey = b_data.get('gkey')
+                        b_factno_upper = b_data.get('factno', '').upper()
+                        
+                        b_data['type'] = '1'
+                        b_data['factno'] = b_factno_upper
+                        b_data['parentgkey'] = master_obj.gkey
+
+                        if b_gkey and not str(b_gkey).startswith('temp_'):
+                            b_instance = Ba015.objects.get(gkey=b_gkey)
+                            b_serializer = Ba015Serializer(b_instance, data=b_data, partial=True)
+                        else:
+                            b_data.pop('gkey', None)
+                            b_serializer = Ba015Serializer(data=b_data)
+                        
+                        b_serializer.is_valid(raise_exception=True)
+                        b_obj = b_serializer.save()
+                        saved_branch_gkeys.append(b_obj.gkey)
+                        
+                        if b_gkey:
+                            gkey_map[b_gkey] = b_obj.gkey
+                    
+                    # 刪除已不存在於前端清單中的分廠 (且其 parentgkey 指向本主廠)
+                    Ba015.objects.filter(parentgkey=master_obj).exclude(gkey__in=saved_branch_gkeys).delete()
+
+                # 3. 保存聯絡窗口 Ba016
+                # 先刪除原本所有關聯到此主廠的聯絡窗口 (由於 cascade，有些分廠被刪時其聯絡人已自動被刪，但這裡統一先清空再重建)
+                Ba016.objects.filter(ba015gkey=master_obj).delete()
+                # 也要刪除原本關聯到分廠的聯絡窗口，以防萬一
+                if entity_type == '1' and saved_branch_gkeys:
+                    Ba016.objects.filter(ba015gkey__in=saved_branch_gkeys).delete()
+
+                for c_data in contacts_data:
+                    if not c_data.get('contact'):
+                        continue
+                    
+                    c_data.pop('gkey', None)
+                    
+                    # 判斷所屬實體 (parentgkey) 是主廠還是分廠
+                    orig_parent_gkey = c_data.get('parentgkey')
+                    mapped_parent_gkey = gkey_map.get(orig_parent_gkey, master_obj.gkey)
+                    
+                    # 設定外鍵
+                    c_data['ba015gkey'] = master_obj.gkey
+                    c_data['parentgkey'] = mapped_parent_gkey
+                    
+                    c_serializer = Ba016Serializer(data=c_data)
+                    c_serializer.is_valid(raise_exception=True)
+                    c_serializer.save()
+
+            return Response({'status': 'success', 'gkey': master_obj.gkey}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class Ba016ViewSet(viewsets.ModelViewSet):
     """統一聯絡人 ViewSet"""
@@ -565,6 +659,107 @@ class Es101ViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         employeeno = self.request.data.get('employeeno', '').upper()
         serializer.save(employeeno=employeeno)
+
+    @action(detail=False, methods=['post'], url_path='deep_save')
+    def deep_save(self, request):
+        data = request.data
+        master_data = data.get('master', {})
+        educations_data = data.get('educations', [])
+        experiences_data = data.get('experiences', [])
+        families_data = data.get('families', [])
+
+        try:
+            with transaction.atomic():
+                # 1. Save or Update Master (Es101)
+                master_obj = None
+                if master_data and master_data.get('gkey'):
+                    gkey = master_data.get('gkey')
+                    if str(gkey).startswith('temp_'):
+                        # Create new master
+                        master_data.pop('gkey', None)
+                        employeeno = master_data.get('employeeno', '').upper()
+                        master_data['employeeno'] = employeeno
+                        serializer = self.get_serializer(data=master_data)
+                        serializer.is_valid(raise_exception=True)
+                        master_obj = serializer.save()
+                    else:
+                        # Update existing master
+                        inst = Es101.objects.select_for_update().get(pk=gkey)
+                        employeeno = master_data.get('employeeno', inst.employeeno).upper()
+                        master_data['employeeno'] = employeeno
+                        serializer = self.get_serializer(inst, data=master_data, partial=True)
+                        serializer.is_valid(raise_exception=True)
+                        master_obj = serializer.save()
+
+                if master_obj:
+                    # 2. Sync Educations (Es102)
+                    keep_edu_keys = []
+                    for item in educations_data:
+                        edu_gkey = item.get('gkey')
+                        item['es101gkey'] = master_obj.gkey
+                        if not edu_gkey or str(edu_gkey).startswith('temp_'):
+                            item.pop('gkey', None)
+                            edu_ser = Es102Serializer(data=item)
+                            edu_ser.is_valid(raise_exception=True)
+                            edu_obj = edu_ser.save()
+                            keep_edu_keys.append(edu_obj.gkey)
+                        else:
+                            edu_inst = Es102.objects.get(pk=edu_gkey)
+                            edu_ser = Es102Serializer(edu_inst, data=item, partial=True)
+                            edu_ser.is_valid(raise_exception=True)
+                            edu_obj = edu_ser.save()
+                            keep_edu_keys.append(edu_obj.gkey)
+                    Es102.objects.filter(es101gkey=master_obj.gkey).exclude(gkey__in=keep_edu_keys).delete()
+
+                    # 3. Sync Experiences (Es103)
+                    keep_exp_keys = []
+                    for item in experiences_data:
+                        exp_gkey = item.get('gkey')
+                        item['es101gkey'] = master_obj.gkey
+                        if not exp_gkey or str(exp_gkey).startswith('temp_'):
+                            item.pop('gkey', None)
+                            exp_ser = Es103Serializer(data=item)
+                            exp_ser.is_valid(raise_exception=True)
+                            exp_obj = exp_ser.save()
+                            keep_exp_keys.append(exp_obj.gkey)
+                        else:
+                            exp_inst = Es103.objects.get(pk=exp_gkey)
+                            exp_ser = Es103Serializer(exp_inst, data=item, partial=True)
+                            exp_ser.is_valid(raise_exception=True)
+                            exp_obj = exp_ser.save()
+                            keep_exp_keys.append(exp_obj.gkey)
+                    Es103.objects.filter(es101gkey=master_obj.gkey).exclude(gkey__in=keep_exp_keys).delete()
+
+                    # 4. Sync Families (Es104)
+                    keep_fam_keys = []
+                    for item in families_data:
+                        fam_gkey = item.get('gkey')
+                        item['es101gkey'] = master_obj.gkey
+                        if not fam_gkey or str(fam_gkey).startswith('temp_'):
+                            item.pop('gkey', None)
+                            fam_ser = Es104Serializer(data=item)
+                            fam_ser.is_valid(raise_exception=True)
+                            fam_obj = fam_ser.save()
+                            keep_fam_keys.append(fam_obj.gkey)
+                        else:
+                            fam_inst = Es104.objects.get(pk=fam_gkey)
+                            fam_ser = Es104Serializer(fam_inst, data=item, partial=True)
+                            fam_ser.is_valid(raise_exception=True)
+                            fam_obj = fam_ser.save()
+                            keep_fam_keys.append(fam_obj.gkey)
+                    Es104.objects.filter(es101gkey=master_obj.gkey).exclude(gkey__in=keep_fam_keys).delete()
+
+            master_serializer = self.get_serializer(master_obj)
+            return Response({
+                "success": True,
+                "message": "員工帳號基本資料及明細儲存成功！",
+                "master": master_serializer.data
+            })
+        except Exception as e:
+            return Response({
+                "success": False,
+                "detail": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class Es102ViewSet(viewsets.ModelViewSet):
@@ -1389,6 +1584,51 @@ class Dp028ViewSet(BaseDictionaryViewSet):
         return qs.order_by('serialno')
 
 
+def generate_dp030_sampleno(year, ba055gkey):
+    if not year:
+        raise ValueError("年度不可空白，無法產生樣品單號。")
+
+    if not ba055gkey:
+        raise ValueError("季節不可空白，無法產生樣品單號。")
+
+    from .models import Ba055, Dp030
+    try:
+        season = Ba055.objects.get(gkey=ba055gkey)
+    except Ba055.DoesNotExist:
+        raise ValueError("找不到指定的季節資料，無法產生樣品單號。")
+
+    season_code = season.groupcode
+    season_code = str(season_code or '').strip()
+
+    if not season_code:
+        raise ValueError("季節代碼不可空白，無法產生樣品單號。")
+
+    prefix = f"{year}{season_code}"
+
+    last = (
+        Dp030.objects
+        .filter(sampleno__startswith=prefix)
+        .order_by('-sampleno')
+        .first()
+    )
+
+    if last and last.sampleno:
+        seq_text = str(last.sampleno)[len(prefix):]
+        import re
+        digits = re.findall(r'\d+', seq_text)
+        if digits:
+            try:
+                next_seq = int(digits[-1]) + 1
+            except ValueError:
+                next_seq = 1
+        else:
+            next_seq = 1
+    else:
+        next_seq = 1
+
+    return f"{prefix}{next_seq:04d}"
+
+
 class Dp030ViewSet(BaseDictionaryViewSet):
     """樣品單主檔 dp030"""
     queryset = Dp030.objects.all()
@@ -1413,57 +1653,295 @@ class Dp030ViewSet(BaseDictionaryViewSet):
         🎯 樣品欠數看板核心引擎 (Outstanding List Aggregator)
         串聯 dp030 -> dp031 -> dp033 進行即時進度計算。
         """
-        from django.db.models import Q
-        qs = Dp033.objects.filter(
-            Q(dp031gkey__status__in=['1', '2']) |
-            Q(dp031gkey__isnull=True, dp030gkey__status__in=['1', '2'])
-        ).select_related(
-            'dp030gkey', 'dp031gkey', 'dp030gkey__ba010gkey', 'dp030gkey__ba015gkey', 'dp030gkey__dp002gkey',
-            'dp030gkey__dp010gkey', 'dp030gkey__dp015gkey', 'dp030gkey__dp020gkey'
-        )
-        
-        cust = request.query_params.get('ba010gkey')
-        year = request.query_params.get('year')
-        stype = request.query_params.get('dp002gkey')
-        sampleno = request.query_params.get('sampleno')
+        try:
+            from django.db.models import Q
+            from django.utils.dateparse import parse_datetime
+            from api.services.sample_status_service import get_sample_status_mode
 
-        if cust: qs = qs.filter(dp030gkey__ba010gkey=cust)
-        if year: qs = qs.filter(dp030gkey__year=year)
-        if stype: qs = qs.filter(dp030gkey__dp002gkey=stype)
-        if sampleno: qs = qs.filter(dp030gkey__sampleno__icontains=sampleno)
-        
-        res = []
-        for row in qs:
-            req = float(row.custpairs or 0) + float(row.keeppairs or 0)
-            fin = float(row.finishpairs or 0)
-            outst = req - fin
-            if outst < 0: outst = 0
+            qs = Dp033.objects.filter(
+                Q(dp031gkey__status__in=['1', '2']) |
+                Q(dp031gkey__isnull=True, dp030gkey__status__in=['1', '2'])
+            ).exclude(
+                dp030gkey__status__in=['0', '3']
+            ).select_related(
+                'dp030gkey', 'dp031gkey', 'dp030gkey__ba010gkey', 'dp030gkey__ba015gkey', 'dp030gkey__dp002gkey',
+                'dp030gkey__dp010gkey', 'dp030gkey__dp015gkey', 'dp030gkey__dp020gkey', 'dp030gkey__dp023gkey',
+                'dp030gkey__es101gkey', 'dp030gkey__ba055gkey'
+            ).prefetch_related(
+                'shipments__dp040gkey'
+            )
             
-            res.append({
-                'gkey': row.gkey,
-                'sampleno': row.dp030gkey.sampleno,
-                'sampletype': row.dp030gkey.dp002gkey.esampletype if row.dp030gkey.dp002gkey else '',
-                'issuedate': row.dp030gkey.issuedate,
-                'styleno': row.dp031gkey.styleno if row.dp031gkey else row.dp030gkey.styleno,
-                'stylename': row.dp030gkey.stylename,
-                'stock': row.dp030gkey.stock,
-                'customer': row.dp030gkey.ba010gkey.shortname if row.dp030gkey.ba010gkey else '',
-                'factory': row.dp030gkey.ba015gkey.shortname if row.dp030gkey.ba015gkey else '',
-                'color': row.dp031gkey.color if row.dp031gkey else '',
-                'photopath': row.dp031gkey.photopath if row.dp031gkey else '',
-                'size': row.size,
-                'custpairs': float(row.custpairs or 0),
-                'keeppairs': float(row.keeppairs or 0),
-                'finishpairs': fin,
-                'outstanding': outst,
-                'completion_rate': round((fin / req * 100), 2) if req > 0 else 0,
-                'lastno': row.dp030gkey.dp010gkey.lastno if row.dp030gkey.dp010gkey else '',
-                'bottomno': row.dp030gkey.dp015gkey.bottomno if row.dp030gkey.dp015gkey else '',
-                'heelno': row.dp030gkey.dp020gkey.heelno if row.dp030gkey.dp020gkey else '',
-                'duedate': row.dp030gkey.duedate,
-            })
-        
-        return Response(res)
+            cust = request.query_params.get('ba010gkey')
+            fty = request.query_params.get('ba015gkey')
+            year = request.query_params.get('year')
+            season = request.query_params.get('ba055gkey')
+            stype = request.query_params.get('dp002gkey')
+            sampleno = request.query_params.get('sampleno')
+            styleno = request.query_params.get('styleno')
+            stylename = request.query_params.get('stylename')
+            stock = request.query_params.get('stock')
+            groupname = request.query_params.get('groupname')
+            lastno = request.query_params.get('lastno')
+            bottomno = request.query_params.get('bottomno')
+            heelno = request.query_params.get('heelno')
+            englishname = request.query_params.get('englishname')
+            approve = request.query_params.get('approve')
+            issuedate_from = request.query_params.get('issuedate_from')
+            issuedate_to = request.query_params.get('issuedate_to')
+
+            if cust: qs = qs.filter(dp030gkey__ba010gkey_id=cust)
+            if fty: qs = qs.filter(dp030gkey__ba015gkey_id=fty)
+            if year: qs = qs.filter(dp030gkey__year=year)
+            if season: qs = qs.filter(dp030gkey__ba055gkey_id=season)
+            if stype: qs = qs.filter(dp030gkey__dp002gkey_id=stype)
+            if sampleno: qs = qs.filter(dp030gkey__sampleno__icontains=sampleno)
+            if styleno: qs = qs.filter(Q(dp031gkey__styleno__icontains=styleno) | Q(dp031gkey__isnull=True, dp030gkey__styleno__icontains=styleno))
+            if stylename: qs = qs.filter(dp030gkey__stylename__icontains=stylename)
+            if stock: qs = qs.filter(dp030gkey__stock__icontains=stock)
+            if groupname: qs = qs.filter(dp030gkey__dp023gkey__groupname__icontains=groupname)
+            if lastno: qs = qs.filter(dp030gkey__dp010gkey__lastno__icontains=lastno)
+            if bottomno: qs = qs.filter(dp030gkey__dp015gkey__bottomno__icontains=bottomno)
+            if heelno: qs = qs.filter(dp030gkey__dp020gkey__heelno__icontains=heelno)
+            if englishname: qs = qs.filter(Q(dp030gkey__es101gkey__englishname__icontains=englishname) | Q(dp030gkey__es101gkey__chinesename__icontains=englishname))
+            if approve: qs = qs.filter(dp030gkey__approve=approve)
+
+            if issuedate_from:
+                dt_from = parse_datetime(issuedate_from)
+                if dt_from: qs = qs.filter(dp030gkey__issuedate__gte=dt_from)
+            if issuedate_to:
+                dt_to = parse_datetime(issuedate_to)
+                if dt_to: qs = qs.filter(dp030gkey__issuedate__lte=dt_to)
+
+            try:
+                samplestatus = get_sample_status_mode()
+            except Exception:
+                samplestatus = '1'
+
+            try:
+                limit = int(request.query_params.get('limit', 500))
+            except ValueError:
+                limit = 500
+            limit = min(max(limit, 1), 2000)
+
+            res = []
+            count = 0
+            for row in qs[:20000]:
+                dp030 = row.dp030gkey
+                dp031 = row.dp031gkey
+                
+                cust_pairs = float(row.custpairs or 0)
+                keep_pairs = float(row.keeppairs or 0)
+                sent_pairs = float(row.sentpairs or 0)
+                rec = float(row.receive or 0)
+                
+                if samplestatus == '1':
+                    outst = cust_pairs + keep_pairs - sent_pairs
+                elif samplestatus == '2':
+                    outst = cust_pairs - sent_pairs
+                elif samplestatus == '3':
+                    outst = cust_pairs + keep_pairs - rec - sent_pairs
+                else:
+                    outst = cust_pairs - sent_pairs
+
+                if outst <= 0:
+                    continue
+
+                # Compute latest sentdate
+                shipments = list(row.shipments.all())
+                sent_dates = [s.dp040gkey.sentdate for s in shipments if s.dp040gkey and s.dp040gkey.sentdate]
+                latest_sentdate = max(sent_dates) if sent_dates else None
+
+                # Safe access
+                cust_name = dp030.ba010gkey.shortname if dp030 and dp030.ba010gkey else ''
+                fty_name = dp030.ba015gkey.shortname if dp030 and dp030.ba015gkey else ''
+                season_name = dp030.ba055gkey.groupcode if dp030 and dp030.ba055gkey else ''
+                sample_type = dp030.dp002gkey.sampletype if dp030 and dp030.dp002gkey else ''
+                group_name = dp030.dp023gkey.groupname if dp030 and dp030.dp023gkey else ''
+                last_no = dp030.dp010gkey.lastno if dp030 and dp030.dp010gkey else ''
+                bottom_no = dp030.dp015gkey.bottomno if dp030 and dp030.dp015gkey else ''
+                heel_no = dp030.dp020gkey.heelno if dp030 and dp030.dp020gkey else ''
+                maker_name = dp030.es101gkey.chinesename if dp030 and dp030.es101gkey else ''
+
+                res.append({
+                    'gkey': row.gkey,
+                    'sampleno': dp030.sampleno if dp030 else '',
+                    'sampletype': sample_type,
+                    'issuedate': dp030.issuedate if dp030 else None,
+                    'styleno': dp031.styleno if dp031 else (dp030.styleno if dp030 else ''),
+                    'stylename': dp030.stylename if dp030 else '',
+                    'stock': dp030.stock if dp030 else '',
+                    'customer': cust_name,
+                    'factory': fty_name,
+                    'season': season_name,
+                    'groupname': group_name,
+                    'maker_name': maker_name,
+                    'color': dp031.color if dp031 else '',
+                    'photopath': dp031.photopath if dp031 else '',
+                    'size': row.size,
+                    'custpairs': cust_pairs,
+                    'keeppairs': keep_pairs,
+                    'finishpairs': sent_pairs, # map to sentpairs as completed progress
+                    'sentpairs': sent_pairs,
+                    'receive': rec,
+                    'sentdate': latest_sentdate,
+                    'outstanding': outst,
+                    'completion_rate': round((sent_pairs / (cust_pairs + keep_pairs) * 100), 2) if (cust_pairs + keep_pairs) > 0 else 0,
+                    'lastno': last_no,
+                    'bottomno': bottom_no,
+                    'heelno': heel_no,
+                    'duedate': dp030.duedate if dp030 else None,
+                })
+                count += 1
+                if count >= limit:
+                    break
+
+            return Response(res)
+        except Exception as e:
+            return Response({'detail': f'讀取未完樣品催交數據失敗: {str(e)}'}, status=400)
+
+    @action(detail=False, methods=['get'], url_path='label_samples')
+    def label_samples(self, request):
+        """
+        🏷️ 樣品標籤管理資料來源 (Label Samples Aggregator)
+        """
+        try:
+            from django.db.models import Q
+            from django.utils.dateparse import parse_datetime
+
+            qs = Dp033.objects.all().select_related(
+                'dp030gkey', 'dp031gkey', 'dp030gkey__ba010gkey', 'dp030gkey__ba015gkey', 'dp030gkey__dp002gkey',
+                'dp030gkey__dp010gkey', 'dp030gkey__dp015gkey', 'dp030gkey__dp020gkey', 'dp030gkey__dp023gkey',
+                'dp030gkey__es101gkey', 'dp030gkey__ba055gkey', 'dp030gkey__ba009gkey', 'dp030gkey__ba005gkey',
+                'dp030gkey__ba003gkey'
+            )
+
+            cust = request.query_params.get('ba010gkey')
+            fty = request.query_params.get('ba015gkey')
+            year = request.query_params.get('year')
+            season = request.query_params.get('ba055gkey')
+            stype = request.query_params.get('dp002gkey')
+            sampleno = request.query_params.get('sampleno')
+            styleno = request.query_params.get('styleno')
+            stylename = request.query_params.get('stylename')
+            stock = request.query_params.get('stock')
+            groupname = request.query_params.get('groupname')
+            englishname = request.query_params.get('englishname')
+            ba009_ebrand = request.query_params.get('ba009_ebrand')
+            dp030_ba005gkey = request.query_params.get('dp030_ba005gkey')
+            statuses = request.query_params.get('statuses')
+            issuedate_from = request.query_params.get('issuedate_from')
+            issuedate_to = request.query_params.get('issuedate_to')
+
+            if cust: qs = qs.filter(dp030gkey__ba010gkey_id=cust)
+            if fty: qs = qs.filter(dp030gkey__ba015gkey_id=fty)
+            if year: qs = qs.filter(dp030gkey__year=year)
+            if season: qs = qs.filter(dp030gkey__ba055gkey_id=season)
+            if stype: qs = qs.filter(dp030gkey__dp002gkey_id=stype)
+            if sampleno: qs = qs.filter(dp030gkey__sampleno__icontains=sampleno)
+            if styleno: qs = qs.filter(dp031gkey__styleno__icontains=styleno)
+            if stylename: qs = qs.filter(dp030gkey__stylename__icontains=stylename)
+            if stock: qs = qs.filter(dp030gkey__stock__icontains=stock)
+            if groupname: qs = qs.filter(dp030gkey__dp023gkey__groupname__icontains=groupname)
+            if englishname: qs = qs.filter(Q(dp030gkey__es101gkey__englishname__icontains=englishname) | Q(dp030gkey__es101gkey__chinesename__icontains=englishname))
+            if ba009_ebrand: qs = qs.filter(dp030gkey__ba009gkey__ebrand__icontains=ba009_ebrand)
+            if dp030_ba005gkey: qs = qs.filter(dp030gkey__ba005gkey_id=dp030_ba005gkey)
+
+            if statuses and statuses != 'all':
+                qs = qs.filter(dp031gkey__status__in=statuses.split(','))
+
+            if issuedate_from:
+                dt_from = parse_datetime(issuedate_from)
+                if dt_from: qs = qs.filter(dp030gkey__issuedate__gte=dt_from)
+            if issuedate_to:
+                dt_to = parse_datetime(issuedate_to)
+                if dt_to: qs = qs.filter(dp030gkey__issuedate__lte=dt_to)
+
+            try:
+                limit = int(request.query_params.get('limit', 500))
+            except ValueError:
+                limit = 500
+            limit = min(max(limit, 1), 2000)
+
+            res = []
+            for row in qs[:limit]:
+                dp030 = row.dp030gkey
+                dp031 = row.dp031gkey
+                
+                cust_name = dp030.ba010gkey.shortname if dp030 and dp030.ba010gkey else ''
+                fty_name = dp030.ba015gkey.shortname if dp030 and dp030.ba015gkey else ''
+                season_name = dp030.ba055gkey.groupcode if dp030 and dp030.ba055gkey else ''
+                sample_type = dp030.dp002gkey.sampletype if dp030 and dp030.dp002gkey else ''
+                group_name = dp030.dp023gkey.groupname if dp030 and dp030.dp023gkey else ''
+                last_no = dp030.dp010gkey.lastno if dp030 and dp030.dp010gkey else ''
+                brand_name = dp030.ba009gkey.ebrand if dp030 and dp030.ba009gkey else ''
+                origin_name = dp030.ba003gkey.eorigin if dp030 and dp030.ba003gkey else ''
+                belongto_name = dp030.ba005gkey.ename if dp030 and dp030.ba005gkey else ''
+                maker_name = dp030.es101gkey.englishname if dp030 and dp030.es101gkey else ''
+
+                cust_pairs = float(row.custpairs or 0)
+                keep_pairs = float(row.keeppairs or 0)
+                qty = int((cust_pairs + keep_pairs) * 2)
+
+                res.append({
+                    'gkey': row.gkey,
+                    'dp030_gkey': dp030.gkey if dp030 else '',
+                    'dp031_gkey': dp031.gkey if dp031 else '',
+                    'chk': 'N',
+                    'qty': qty,
+                    'dp031_serialno': dp031.serialno if dp031 else 0,
+                    'ba010_shortname': cust_name,
+                    'ba015_shortname': fty_name,
+                    'dp002_esampletype': sample_type,
+                    'dp030_sampleno': dp030.sampleno if dp030 else '',
+                    'dp031_styleno': dp031.styleno if dp031 else (dp030.styleno if dp030 else ''),
+                    'dp030_stylename': dp030.stylename if dp030 else '',
+                    'dp030_stock': dp030.stock if dp030 else '',
+                    'dp023_groupname': group_name,
+                    'dp031_color': dp031.color if dp031 else '',
+                    'dp031_ecolor': dp031.ecolor if dp031 else '',
+                    'dp031_upper': dp031.upper if dp031 else '',
+                    'dp031_lining': dp031.lining if dp031 else '',
+                    'dp031_sock': dp031.sock if dp031 else '',
+                    'dp031_bottom': dp031.bottom if dp031 else '',
+                    'dp031_heel': dp031.heel if dp031 else '',
+                    'dp031_tongue': dp031.tongue if dp031 else '',
+                    'dp030_logo': dp030.logo if dp030 else '',
+                    'dp030_duedate': dp030.duedate if dp030 else None,
+                    'dp030_custdate': dp030.custdate if dp030 else None,
+                    'dp033_size': row.size,
+                    'custpairs': cust_pairs,
+                    'keeppairs': keep_pairs,
+                    'dp031_photopath': dp031.photopath if dp031 else '',
+                    'dp030_year': dp030.year if dp030 else '',
+                    'other1': dp031.other if dp031 else '',
+                    'other2': '',
+                    'other3': '',
+                    'dp030_ba005gkey': dp030.ba005gkey_id if dp030 else '',
+                    'dp030_ba009gkey': dp030.ba009gkey_id if dp030 else '',
+                    'dp030_ba010gkey': dp030.ba010gkey_id if dp030 else '',
+                    'dp030_ba015gkey': dp030.ba015gkey_id if dp030 else '',
+                    'dp030_es101gkey': dp030.es101gkey_id if dp030 else '',
+                    'dp030_ba055gkey': dp030.ba055gkey_id if dp030 else '',
+                    'es101_englishname': maker_name,
+                    'dp030_status': dp030.status if dp030 else '1',
+                    'dp010_lastno': last_no,
+                    'dp030_designer': dp030.designer if dp030 else '',
+                    'dp015_bottomno': dp030.dp015gkey.bottomno if dp030 and dp030.dp015gkey else '',
+                    'ba009_ebrand': brand_name,
+                    'ba055_groupcode': season_name,
+                    'dp030_construction': dp030.construction if dp030 else '',
+                    'ba003_eorigin': origin_name,
+                    'dp030_rqstby': dp030.rqstby if dp030 else '',
+                    'dp030_issuedate': dp030.issuedate if dp030 else None,
+                    'dp031_pono': dp031.pono if dp031 else '',
+                    'ba005_ename': belongto_name,
+                    'dp031_colorcode': dp031.colorcode if dp031 else '',
+                    'dp033_barcode': row.barcode if row.barcode else '',
+                })
+
+            return Response(res)
+        except Exception as e:
+            return Response({'detail': f'讀取樣品 Label 資料失敗: {str(e)}'}, status=400)
 
     @action(detail=False, methods=['post'], url_path='deep_save')
     def deep_save(self, request):
@@ -1481,12 +1959,19 @@ class Dp030ViewSet(BaseDictionaryViewSet):
         try:
             with transaction.atomic():
                 # 1. Save Master Dp030
-                # 1. Save Master Dp030
                 m_gkey = master_data.get('gkey')
                 is_new_master = (not m_gkey) or str(m_gkey).startswith('temp_')
 
                 if is_new_master:
                     master_data.pop('gkey', None)
+
+                    raw_sampleno = str(master_data.get('sampleno') or '').strip()
+                    if (not raw_sampleno) or raw_sampleno in ['自動產生', 'AUTO', 'auto', 'Auto']:
+                        master_data['sampleno'] = generate_dp030_sampleno(
+                            master_data.get('year'),
+                            master_data.get('ba055gkey')
+                        )
+
                     serializer = Dp030Serializer(data=master_data)
                     serializer.is_valid(raise_exception=True)
                     master_instance = serializer.save()
@@ -1494,13 +1979,12 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                     try:
                         master_instance = Dp030.objects.select_for_update().get(gkey=m_gkey)
                     except Dp030.DoesNotExist:
-                        return Response(
-                            {
-                                "success": False,
-                                "detail": "找不到要儲存的樣品主檔，可能已被刪除，請重新查詢後再操作。"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                        raise ValueError("找不到要儲存的樣品主檔，可能已被刪除，請重新查詢後再操作。")
+
+                    # 修改既有資料時，不可讓 sampleno 被清空
+                    raw_sampleno = str(master_data.get('sampleno') or '').strip()
+                    if not raw_sampleno:
+                        raise ValueError("樣品單號不可空白，請重新查詢後再操作。")
 
                     serializer = Dp030Serializer(master_instance, data=master_data, partial=True)
                     serializer.is_valid(raise_exception=True)
@@ -1509,8 +1993,13 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                 # 2. Helper to process dynamic child tables easily
                 def process_child(upsert_list, delete_keys, model_cls, serializer_cls, fk_name):
                     # Process Deletes
-                    if delete_keys:
-                        model_cls.objects.filter(gkey__in=delete_keys).delete()
+                    real_delete_keys = [
+                        k for k in delete_keys
+                        if k and not str(k).startswith('temp_')
+                    ]
+                    if real_delete_keys:
+                        model_cls.objects.filter(gkey__in=real_delete_keys).delete()
+
                     # Process Upserts
                     max_sn = model_cls.objects.filter(**{fk_name: master_instance}).aggregate(Max('serialno'))['serialno__max'] or 0
                     for item in upsert_list:
@@ -1524,7 +2013,8 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                         # Specific Nested Cascade: Dp031 -> Dp033
                         sub_sizes = data.pop('details_dp033', {}) # nested size array inside Dp031 row if any
                         
-                        if gkey and str(gkey).startswith('temp_'):
+                        is_new_child = (not gkey) or str(gkey).startswith('temp_')
+                        if is_new_child:
                             data.pop('gkey', None)
                             data.pop('serialno', None)
                             max_sn += 1
@@ -1532,7 +2022,11 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                             ser.is_valid(raise_exception=True)
                             inst = ser.save(**{fk_name: master_instance, 'serialno': max_sn})
                         else:
-                            inst = model_cls.objects.get(gkey=gkey)
+                            try:
+                                inst = model_cls.objects.select_for_update().get(gkey=gkey)
+                            except model_cls.DoesNotExist:
+                                raise ValueError("找不到要儲存的明細資料，可能已被刪除，請重新查詢後再操作。")
+
                             data.pop('serialno', None)
                             ser = serializer_cls(inst, data=data, partial=True)
                             ser.is_valid(raise_exception=True)
@@ -1542,21 +2036,37 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                         if model_cls == Dp031 and sub_sizes:
                             sub_up = sub_sizes.get('upsert', [])
                             sub_del = sub_sizes.get('delete', [])
-                            if sub_del:
-                                Dp033.objects.filter(gkey__in=sub_del).delete()
+                            
+                            real_sub_del = [
+                                k for k in sub_del
+                                if k and not str(k).startswith('temp_')
+                            ]
+                            if real_sub_del:
+                                Dp033.objects.filter(gkey__in=real_sub_del).delete()
+
                             sub_max = Dp033.objects.filter(dp031gkey=inst).aggregate(Max('serialno'))['serialno__max'] or 0
                             for sz_item in sub_up:
                                 sz_data = {k: v for k, v in sz_item.items()}
                                 sz_gkey = sz_data.get('gkey')
-                                if sz_gkey and str(sz_gkey).startswith('temp_'):
+                                
+                                is_new_size = (not sz_gkey) or str(sz_gkey).startswith('temp_')
+                                if is_new_size:
                                     sz_data.pop('gkey', None)
                                     sz_data.pop('serialno', None)
                                     sub_max += 1
                                     sz_ser = Dp033Serializer(data=sz_data)
                                     sz_ser.is_valid(raise_exception=True)
-                                    sz_ser.save(dp031gkey=inst, dp030gkey=master_instance, serialno=sub_max)
+                                    sz_ser.save(
+                                        dp031gkey=inst,
+                                        dp030gkey=master_instance,
+                                        serialno=sub_max
+                                    )
                                 else:
-                                    sz_inst = Dp033.objects.get(gkey=sz_gkey)
+                                    try:
+                                        sz_inst = Dp033.objects.select_for_update().get(gkey=sz_gkey)
+                                    except Dp033.DoesNotExist:
+                                        raise ValueError("找不到要儲存的尺碼資料，可能已被刪除，請重新查詢後再操作。")
+
                                     sz_data.pop('serialno', None)
                                     sz_ser = Dp033Serializer(sz_inst, data=sz_data, partial=True)
                                     sz_ser.is_valid(raise_exception=True)
@@ -1574,9 +2084,31 @@ class Dp030ViewSet(BaseDictionaryViewSet):
                 if details_dp104:
                     process_child(details_dp104.get('upsert', []), details_dp104.get('delete', []), Dp104, Dp104Serializer, 'dp030gkey')
 
-            return Response({"success": True, "message": "樣品指令單完整聯動儲存成功", "gkey": master_instance.gkey})
+            return Response({
+                "success": True,
+                "message": "樣品指令單完整聯動儲存成功",
+                "gkey": master_instance.gkey,
+                "sampleno": master_instance.sampleno
+            })
+        except IntegrityError as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"success": False, "detail": "樣品單號產生衝突，請重新存檔一次。"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except ValueError as e:
+            return Response(
+                {"success": False, "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
-            return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"success": False, "detail": "樣品單儲存失敗，請確認資料是否完整後再試。"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class Dp031ViewSet(BaseDictionaryViewSet):
@@ -2710,6 +3242,148 @@ class Mr035ViewSet(viewsets.ViewSet):
             {"gkey": "mat_gkey_4", "mstkno": "MAT-004", "mname": "帆布"},
             {"gkey": "mat_gkey_5", "mstkno": "MAT-005", "mname": "PU"},
         ])
+
+
+# ============================================================================
+# 🔐 ERP Web 登入與權限系統 API
+# ============================================================================
+
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authtoken.models import Token
+from django.contrib.auth import authenticate
+from api.models import SysAccountsActive, generate_pb_gkey
+from core.authz.services import build_permission_map, build_menu_tree
+
+
+def _get_sys_account(user):
+    account = getattr(user, 'sys_account', None)
+    if not account:
+        account = SysAccount.objects.filter(accounts_id__iexact=user.username).first()
+        if account:
+            user.sys_account = account
+    return account
+
+
+def _get_user_info_response(user):
+    display_name = user.username
+    employee_no = user.username
+    email = ""
+    privilege_class = "1"
+
+    account = getattr(user, 'sys_account', None)
+    if account:
+        privilege_class = account.peopdom_class
+        from api.models import Es101
+        es101 = Es101.objects.filter(gkey=account.user_id).first()
+        if es101:
+            display_name = es101.englishname or es101.chinesename or user.username
+            employee_no = es101.employeeno or user.username
+            email = es101.email or ""
+
+    return {
+        "username": user.username,
+        "display_name": display_name,
+        "employee_no": employee_no,
+        "privilege_class": privilege_class,
+        "email": email
+    }
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def auth_login(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    if not username or not password:
+        return Response({"detail": "請輸入帳號與密碼。"}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = authenticate(request, username=username, password=password)
+    if not user:
+        return Response({"detail": "帳號或密碼錯誤。"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    token, _ = Token.objects.get_or_create(user=user)
+
+    # 寫入重複登入 active session
+    account = getattr(user, 'sys_account', None)
+    if account:
+        # 單一 Session 強制機制：清空之前的連線
+        SysAccountsActive.objects.filter(accounts_id=account.accounts_id).delete()
+        SysAccountsActive.objects.create(
+            gkey=generate_pb_gkey(),
+            hisystem=account.hisystem or '01',
+            accounts_id=account.accounts_id,
+            logintime=timezone.now(),
+            computername="WebBrowser",
+            loginip=request.META.get('REMOTE_ADDR', '127.0.0.1'),
+            spid=9999,
+            win_login="Web"
+        )
+
+    return Response({
+        "token": token.key,
+        "user": _get_user_info_response(user)
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def auth_logout(request):
+    account = _get_sys_account(request.user)
+    if not account:
+        return Response({
+            "success": False,
+            "detail": "找不到對應的 ERP 使用者帳號。"
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    # 刪除 active session
+    SysAccountsActive.objects.filter(accounts_id=account.accounts_id).delete()
+    # 刪除 token
+    if hasattr(request, 'auth') and request.auth:
+        request.auth.delete()
+    return Response({"detail": "Successfully logged out."})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def auth_me(request):
+    account = _get_sys_account(request.user)
+    if not account:
+        return Response({
+            "success": False,
+            "detail": "找不到對應的 ERP 使用者帳號。"
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(_get_user_info_response(request.user))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def auth_permissions(request):
+    account = _get_sys_account(request.user)
+    if not account:
+        return Response({
+            "success": False,
+            "detail": "找不到對應的 ERP 使用者帳號。"
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    perm_map = build_permission_map(account)
+    return Response(perm_map)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def auth_menu(request):
+    account = _get_sys_account(request.user)
+    if not account:
+        return Response({
+            "success": False,
+            "detail": "找不到對應的 ERP 使用者帳號。"
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    menu_tree = build_menu_tree(account)
+    return Response(menu_tree)
 
 
 

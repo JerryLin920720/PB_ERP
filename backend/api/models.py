@@ -762,6 +762,7 @@ class SysAccount(models.Model):
     status_sign = models.CharField(max_length=1, default='0', db_column='status_sign') 
 
     class Meta:
+        managed = False
         db_table = 'sys_accounts'
 
 
@@ -2008,6 +2009,64 @@ class Mr030(models.Model):
         managed = True   # We created this table ourselves
         db_table = 'mr030'
         ordering = ['veinno']
+
+
+class SysMenu(models.Model):
+    prg_code = models.CharField(primary_key=True, max_length=20, db_column='prg_code')
+    obj_name = models.CharField(max_length=40, db_column='obj_name', blank=True, null=True)
+    prg_name = models.CharField(max_length=40, db_column='prg_name', blank=True, null=True)
+    parent_code = models.CharField(max_length=10, db_column='parent_code', blank=True, null=True)
+    fram_class = models.CharField(max_length=1, db_column='fram_class', blank=True, null=True)
+    prg_serialno = models.DecimalField(max_digits=10, decimal_places=2, db_column='prg_serialno', blank=True, null=True)
+    sysflag = models.CharField(max_length=1, db_column='sysflag', blank=True, null=True)
+    chinesebigname = models.CharField(max_length=40, db_column='chinesebigname', blank=True, null=True)
+    chinesesimpname = models.CharField(max_length=40, db_column='chinesesimpname', blank=True, null=True)
+    englishname = models.CharField(max_length=100, db_column='englishname', blank=True, null=True)
+    vietnamname = models.CharField(max_length=40, db_column='vietnamname', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sys_menu'
+
+
+class SysPopedom(models.Model):
+    obj_name = models.CharField(primary_key=True, max_length=40, db_column='obj_name')
+    accounts_id = models.CharField(max_length=50, db_column='accounts_id')
+    prg_popedom = models.CharField(max_length=20, db_column='prg_popedom')
+    flag = models.CharField(max_length=10, db_column='flag')
+    hisystem = models.CharField(max_length=10, db_column='hisystem')
+
+    class Meta:
+        managed = False
+        db_table = 'sys_popedom'
+        unique_together = (('accounts_id', 'obj_name', 'flag', 'hisystem'),)
+
+
+class SysPopedomDesc(models.Model):
+    popedom_id = models.CharField(primary_key=True, max_length=30, db_column='popedom_id')
+    hisystem = models.CharField(max_length=10, db_column='hisystem')
+    obj_name = models.CharField(max_length=40, db_column='obj_name')
+    popedom_desc = models.CharField(max_length=20, db_column='popedom_desc')
+    popedom_index = models.IntegerField(db_column='popedom_index')
+
+    class Meta:
+        managed = False
+        db_table = 'sys_popedom_desc'
+
+
+class SysAccountsActive(models.Model):
+    gkey = models.CharField(primary_key=True, max_length=20, db_column='gkey')
+    hisystem = models.CharField(max_length=10, db_column='hisystem')
+    accounts_id = models.CharField(max_length=50, db_column='accounts_id')
+    logintime = models.DateTimeField(db_column='logintime')
+    computername = models.CharField(max_length=50, db_column='computername')
+    loginip = models.CharField(max_length=50, db_column='loginip')
+    spid = models.IntegerField(db_column='spid')
+    win_login = models.CharField(max_length=50, db_column='win_login')
+
+    class Meta:
+        managed = False
+        db_table = 'sys_accounts_active'
 
 
 
