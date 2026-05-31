@@ -3568,6 +3568,14 @@ class Dp060ViewSet(viewsets.ViewSet):
         styleno = request.query_params.get('styleno')
         pono = request.query_params.get('pono')
 
+        orddate_from = request.query_params.get('orddate_from')
+        orddate_to = request.query_params.get('orddate_to')
+        custno = request.query_params.get('custno')
+        factno = request.query_params.get('factno')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+        gender_gkey = request.query_params.get('gender_gkey')
+
         # Compatibility with old parameter names from frontend
         if not customer:
             customer = request.query_params.get('shortname') or request.query_params.get('cust')
@@ -3577,11 +3585,11 @@ class Dp060ViewSet(viewsets.ViewSet):
         # PB Window: w_dp060
         # PB DataWindow: d_dp060_query
         # Purpose: 大底量產統計查詢
-        # Note: This uses prototype/development seed data in PostgreSQL shoe_trading_erp.
         sql = """
             SELECT DISTINCT dp015.bottomno, dp010.lastno, sa031.styleno, ba010.shortname, 
                             ba015.shortname, sa030.pono, dp004.gender, SUM(sa032.pairs) as totalpairs, 
-                            sa032.sizerun, sa030.ba010gkey, sa030.ba015gkey, dp015.photopath
+                            sa032.sizerun, sa030.ba010gkey, sa030.ba015gkey, dp015.photopath,
+                            sa030.orddate, sa030.year, sa030.ba055gkey
             FROM dp015 
             LEFT JOIN sa031 ON sa031.dp015gkey = dp015.gkey 
             LEFT JOIN dp010 ON dp010.gkey = sa031.dp010gkey
@@ -3590,6 +3598,7 @@ class Dp060ViewSet(viewsets.ViewSet):
             LEFT JOIN ba010 ON ba010.gkey = sa030.ba010gkey
             LEFT JOIN ba015 ON ba015.gkey = sa030.ba015gkey
             LEFT JOIN dp004 ON dp004.gkey = sa031.dp004gkey
+            LEFT JOIN dp016 ON dp016.dp015gkey = dp015.gkey AND dp016.serialno = 1
             WHERE sa032.status NOT IN ('0','6','A')
         """
 
@@ -3612,11 +3621,33 @@ class Dp060ViewSet(viewsets.ViewSet):
         if pono:
             sql += " AND sa030.pono ILIKE %s"
             params.append(f"%{pono}%")
+        if orddate_from:
+            sql += " AND sa030.orddate >= %s"
+            params.append(orddate_from)
+        if orddate_to:
+            sql += " AND sa030.orddate <= %s"
+            params.append(orddate_to)
+        if custno:
+            sql += " AND ba010.custno ILIKE %s"
+            params.append(f"%{custno}%")
+        if factno:
+            sql += " AND ba015.factno ILIKE %s"
+            params.append(f"%{factno}%")
+        if year:
+            sql += " AND sa030.year = %s"
+            params.append(year)
+        if ba055gkey:
+            sql += " AND sa030.ba055gkey = %s"
+            params.append(ba055gkey)
+        if gender_gkey:
+            sql += " AND dp016.dp004gkey = %s"
+            params.append(gender_gkey)
 
         sql += """
             GROUP BY dp015.bottomno, dp010.lastno, sa031.styleno, ba010.shortname, 
                      ba015.shortname, sa030.pono, dp004.gender, sa032.sizerun, 
-                     sa030.ba010gkey, sa030.ba015gkey, dp015.photopath
+                     sa030.ba010gkey, sa030.ba015gkey, dp015.photopath,
+                     sa030.orddate, sa030.year, sa030.ba055gkey
             ORDER BY dp015.bottomno
         """
 
@@ -3639,6 +3670,9 @@ class Dp060ViewSet(viewsets.ViewSet):
                 'ba010gkey': r[9] or '',
                 'ba015gkey': r[10] or '',
                 'photopath': r[11] or '',
+                'orddate': r[12].isoformat() if r[12] is not None else None,
+                'year': r[13] or '',
+                'ba055gkey': r[14] or '',
             })
         return Response(results)
 
@@ -3656,6 +3690,16 @@ class Dp065ViewSet(viewsets.ViewSet):
         brand = request.query_params.get('brand')
         maker = request.query_params.get('maker')
 
+        orddate_from = request.query_params.get('orddate_from')
+        orddate_to = request.query_params.get('orddate_to')
+        custno = request.query_params.get('custno')
+        factno = request.query_params.get('factno')
+        ba005gkey = request.query_params.get('ba005gkey')
+        stylename = request.query_params.get('stylename')
+        stock = request.query_params.get('stock')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+
         # Compatibility with old parameter names from frontend
         if not customer:
             customer = request.query_params.get('cust')
@@ -3665,8 +3709,6 @@ class Dp065ViewSet(viewsets.ViewSet):
         # PB Window: w_dp065
         # PB DataWindow: d_dp065_query
         # Purpose: 型體量產統計查詢
-        # Note: stylename and stock are queried from the earliest created dp030 sample sheet for the styleno.
-        # This uses prototype/development seed data in PostgreSQL shoe_trading_erp.
         sql = """
             SELECT DISTINCT dp031.styleno, 
                    (SELECT a.stylename FROM dp030 a WHERE a.gkey = 
@@ -3680,7 +3722,12 @@ class Dp065ViewSet(viewsets.ViewSet):
                    ba015.shortname as factory_shortname, 
                    sa030.pono, 
                    SUM(sa031.pairs) as totalpairs, 
-                   sa031.photopath
+                   sa031.photopath,
+                   sa030.year,
+                   sa030.ba055gkey,
+                   sa030.ba005gkey,
+                   sa030.orddate,
+                   es101.englishname
             FROM dp031
             LEFT JOIN sa031 ON sa031.styleno = dp031.styleno
             LEFT JOIN sa030 ON sa030.gkey = sa031.sa030gkey
@@ -3704,17 +3751,49 @@ class Dp065ViewSet(viewsets.ViewSet):
             sql += " AND ba015.shortname ILIKE %s"
             params.append(f"%{factory}%")
         if group:
-            sql += " AND dp023.groupname ILIKE %s"
-            params.append(f"%{group}%")
+            if len(group) == 20 and group.isalnum():
+                sql += " AND dp030.dp023gkey = %s"
+                params.append(group)
+            else:
+                sql += " AND dp023.groupname ILIKE %s"
+                params.append(f"%{group}%")
         if brand:
             sql += " AND (ba009.ebrand ILIKE %s OR ba009.cbrand ILIKE %s)"
             params.extend([f"%{brand}%", f"%{brand}%"])
         if maker:
             sql += " AND (es101.englishname ILIKE %s OR es101.chinesename ILIKE %s)"
             params.extend([f"%{maker}%", f"%{maker}%"])
+        if orddate_from:
+            sql += " AND sa030.orddate >= %s"
+            params.append(orddate_from)
+        if orddate_to:
+            sql += " AND sa030.orddate <= %s"
+            params.append(orddate_to)
+        if custno:
+            sql += " AND ba010.custno ILIKE %s"
+            params.append(f"%{custno}%")
+        if factno:
+            sql += " AND ba015.factno ILIKE %s"
+            params.append(f"%{factno}%")
+        if ba005gkey:
+            sql += " AND sa030.ba005gkey = %s"
+            params.append(ba005gkey)
+        if stylename:
+            sql += " AND dp030.stylename ILIKE %s"
+            params.append(f"%{stylename}%")
+        if stock:
+            sql += " AND dp030.stock ILIKE %s"
+            params.append(f"%{stock}%")
+        if year:
+            sql += " AND sa030.year = %s"
+            params.append(year)
+        if ba055gkey:
+            sql += " AND sa030.ba055gkey = %s"
+            params.append(ba055gkey)
 
         sql += """
-            GROUP BY dp031.styleno, dp023.groupname, ba010.shortname, ba015.shortname, sa030.pono, sa031.photopath
+            GROUP BY dp031.styleno, dp023.groupname, ba010.shortname, ba015.shortname, sa030.pono, sa031.photopath,
+                     sa030.year, sa030.ba055gkey, sa030.ba005gkey, sa030.orddate, es101.englishname
             ORDER BY dp031.styleno
         """
 
@@ -3734,6 +3813,11 @@ class Dp065ViewSet(viewsets.ViewSet):
                 'pono': r[6] or '',
                 'totalpairs': float(r[7]) if r[7] is not None else 0.0,
                 'photopath': r[8] or '',
+                'year': r[9] or '',
+                'ba055gkey': r[10] or '',
+                'ba005gkey': r[11] or '',
+                'orddate': r[12].isoformat() if r[12] is not None else None,
+                'maker': r[13] or '',
             })
         return Response(results)
 
@@ -3753,6 +3837,17 @@ class Dp070ViewSet(viewsets.ViewSet):
         sampleno = request.query_params.get('sampleno')
         styleno = request.query_params.get('styleno')
 
+        issuedate_from = request.query_params.get('issuedate_from')
+        issuedate_to = request.query_params.get('issuedate_to')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+        stock = request.query_params.get('stock')
+        stylename = request.query_params.get('stylename')
+        custno = request.query_params.get('custno')
+        factno = request.query_params.get('factno')
+        ba005gkey = request.query_params.get('ba005gkey')
+        gender_gkey = request.query_params.get('gender_gkey')
+
         # Compatibility with old parameter names from frontend
         if not customer:
             customer = request.query_params.get('cust')
@@ -3763,7 +3858,7 @@ class Dp070ViewSet(viewsets.ViewSet):
         # PB DataWindow: d_dp070_query
         # Purpose: 樣品數量統計查詢
         sql = """
-            SELECT DISTINCT dp002.sampletype,
+            SELECT DISTINCT dp002.sampleename as sampletype,
                             ba010.shortname as customer_shortname,
                             ba015.shortname as factory_shortname,
                             ba009.ebrand as brand,
@@ -3771,11 +3866,19 @@ class Dp070ViewSet(viewsets.ViewSet):
                             dp031.styleno,
                             dp030.stylename,
                             dp030.stock,
-                            dp031.color,
+                            dp031.ecolor as color,
                             COALESCE((SELECT SUM(COALESCE(dp033.custpairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as custpairs,
                             COALESCE((SELECT SUM(COALESCE(dp033.keeppairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as keeppairs,
                             COALESCE((SELECT SUM(COALESCE(dp033.sentpairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as sentpairs,
-                            dp031.photopath
+                            dp031.photopath,
+                            dp030.year,
+                            dp030.ba055gkey,
+                            dp030.ba005gkey,
+                            es101.englishname as maker,
+                            dp030.issuedate,
+                            dp030.dp004gkey,
+                            dp004.gender,
+                            dp023.groupname
             FROM dp031
             LEFT JOIN dp030 ON dp030.gkey = dp031.dp030gkey
             LEFT JOIN dp002 ON dp002.gkey = dp030.dp002gkey
@@ -3784,7 +3887,8 @@ class Dp070ViewSet(viewsets.ViewSet):
             LEFT JOIN ba009 ON ba009.gkey = dp030.ba009gkey
             LEFT JOIN dp023 ON dp023.gkey = dp030.dp023gkey
             LEFT JOIN es101 ON es101.gkey = dp030.es101gkey
-            WHERE 1=1
+            LEFT JOIN dp004 ON dp004.gkey = dp030.dp004gkey
+            WHERE dp030.status NOT IN ('0','6','A')
         """
 
         params = []
@@ -3801,8 +3905,12 @@ class Dp070ViewSet(viewsets.ViewSet):
             sql += " AND (ba009.ebrand ILIKE %s OR ba009.cbrand ILIKE %s)"
             params.extend([f"%{brand}%", f"%{brand}%"])
         if group:
-            sql += " AND dp023.groupname ILIKE %s"
-            params.append(f"%{group}%")
+            if len(group) == 20 and group.isalnum():
+                sql += " AND dp030.dp023gkey = %s"
+                params.append(group)
+            else:
+                sql += " AND dp023.groupname ILIKE %s"
+                params.append(f"%{group}%")
         if maker:
             sql += " AND (es101.englishname ILIKE %s OR es101.chinesename ILIKE %s)"
             params.extend([f"%{maker}%", f"%{maker}%"])
@@ -3812,6 +3920,36 @@ class Dp070ViewSet(viewsets.ViewSet):
         if styleno:
             sql += " AND dp031.styleno ILIKE %s"
             params.append(f"%{styleno}%")
+        if issuedate_from:
+            sql += " AND dp030.issuedate >= %s"
+            params.append(issuedate_from)
+        if issuedate_to:
+            sql += " AND dp030.issuedate <= %s"
+            params.append(issuedate_to)
+        if year:
+            sql += " AND dp030.year = %s"
+            params.append(year)
+        if ba055gkey:
+            sql += " AND dp030.ba055gkey = %s"
+            params.append(ba055gkey)
+        if stock:
+            sql += " AND dp030.stock ILIKE %s"
+            params.append(f"%{stock}%")
+        if stylename:
+            sql += " AND dp030.stylename ILIKE %s"
+            params.append(f"%{stylename}%")
+        if custno:
+            sql += " AND ba010.custno ILIKE %s"
+            params.append(f"%{custno}%")
+        if factno:
+            sql += " AND ba015.factno ILIKE %s"
+            params.append(f"%{factno}%")
+        if ba005gkey:
+            sql += " AND dp030.ba005gkey = %s"
+            params.append(ba005gkey)
+        if gender_gkey:
+            sql += " AND dp030.dp004gkey = %s"
+            params.append(gender_gkey)
 
         sql += " ORDER BY dp030.sampleno, dp031.styleno"
 
@@ -3839,6 +3977,14 @@ class Dp070ViewSet(viewsets.ViewSet):
                 'totalpairs': total,
                 'sentpairs': float(r[11]) if r[11] is not None else 0.0,
                 'photopath': r[12] or '',
+                'year': r[13] or '',
+                'ba055gkey': r[14] or '',
+                'ba005gkey': r[15] or '',
+                'maker': r[16] or '',
+                'issuedate': r[17].isoformat() if r[17] is not None else None,
+                'gender_gkey': r[18] or '',
+                'gender': r[19] or '',
+                'groupname': r[20] or '',
             })
         return Response(results)
 
@@ -3872,7 +4018,26 @@ class Dp095ViewSet(viewsets.ViewSet):
         factory = request.query_params.get('factory')
         styleno = request.query_params.get('styleno')
         sampleno = request.query_params.get('sampleno')
-        approve_status = request.query_params.get('approve_status')  # all, approved, unapproved
+        approve_status = request.query_params.get('approve_status') or request.query_params.get('approve')
+
+        issuedate_from = request.query_params.get('issuedate_from')
+        issuedate_to = request.query_params.get('issuedate_to')
+        year = request.query_params.get('year')
+        ba055gkey = request.query_params.get('ba055gkey')
+        stylename = request.query_params.get('stylename')
+        stock = request.query_params.get('stock')
+        group = request.query_params.get('group')
+        lastno = request.query_params.get('lastno')
+        bottomno = request.query_params.get('bottomno')
+        heelno = request.query_params.get('heelno')
+        maker = request.query_params.get('maker')
+        custno = request.query_params.get('custno')
+        factno = request.query_params.get('factno')
+        brand = request.query_params.get('brand')
+        ba005gkey = request.query_params.get('ba005gkey')
+        sentdate_from = request.query_params.get('sentdate_from')
+        sentdate_to = request.query_params.get('sentdate_to')
+        invoiceno = request.query_params.get('invoiceno')
 
         # Compatibility with old parameter names from frontend
         if not customer:
@@ -3885,22 +4050,48 @@ class Dp095ViewSet(viewsets.ViewSet):
         # Purpose: Confirmation Sample Control (確認樣核對管控)
         sql = """
             SELECT DISTINCT dp030.sampleno,
+                            dp030.issuedate,
+                            dp030.duedate,
+                            dp002.sampleename as esampletype,
                             dp031.styleno,
-                            dp031.color,
+                            dp030.stylename,
+                            dp030.stock,
                             ba010.shortname as customer_shortname,
                             ba015.shortname as factory_shortname,
-                            dp031.status,
-                            dp033.approvedate,
+                            dp031.ecolor as color,
+                            dp031.upper,
+                            dp033.size,
                             COALESCE(dp033.custpairs, 0) as custpairs,
                             COALESCE(dp033.keeppairs, 0) as keeppairs,
-                            COALESCE(dp033.sentpairs, 0) as sentpairs,
-                            dp031.photopath
-            FROM dp033
-            LEFT JOIN dp031 ON dp031.gkey = dp033.dp031gkey
-            LEFT JOIN dp030 ON dp030.gkey = dp031.dp030gkey
-            LEFT JOIN dp002 ON dp002.gkey = dp030.dp002gkey
-            LEFT JOIN ba010 ON ba010.gkey = dp030.ba010gkey
-            LEFT JOIN ba015 ON ba015.gkey = dp030.ba015gkey
+                            COALESCE(dp041.sentpairs, 0) as sentpairs,
+                            dp033.sentduedate,
+                            dp040.sentdate,
+                            dp033.approvedate,
+                            dp033.shipmentdt,
+                            dp040.invoiceno,
+                            dp040.awbno,
+                            dp033.scheduleremark,
+                            dp031.status,
+                            dp031.photopath,
+                            dp030.year,
+                            dp030.ba055gkey,
+                            dp030.ba005gkey,
+                            dp030.approve,
+                            dp033.serialno
+            FROM dp030
+            INNER JOIN dp031 ON dp031.dp030gkey = dp030.gkey
+            INNER JOIN dp033 ON dp033.dp031gkey = dp031.gkey
+            LEFT OUTER JOIN dp041 ON dp041.dp041_dp033gkey = dp033.gkey
+            LEFT OUTER JOIN dp040 ON dp040.gkey = dp041.dp040gkey
+            LEFT OUTER JOIN dp002 ON dp002.gkey = dp030.dp002gkey
+            LEFT OUTER JOIN ba010 ON ba010.gkey = dp030.ba010gkey
+            LEFT OUTER JOIN ba015 ON ba015.gkey = dp030.ba015gkey 
+            LEFT OUTER JOIN dp023 ON dp023.gkey = dp030.dp023gkey
+            LEFT OUTER JOIN dp010 ON dp010.gkey = dp030.dp010gkey
+            LEFT OUTER JOIN dp015 ON dp015.gkey = dp030.dp015gkey
+            LEFT OUTER JOIN dp020 ON dp020.gkey = dp030.dp020gkey
+            LEFT OUTER JOIN es101 ON es101.gkey = dp030.es101gkey
+            LEFT OUTER JOIN ba009 ON ba009.gkey = dp030.ba009gkey
             WHERE 1=1
         """
 
@@ -3921,18 +4112,75 @@ class Dp095ViewSet(viewsets.ViewSet):
             sql += " AND dp030.sampleno ILIKE %s"
             params.append(f"%{sampleno}%")
 
-        # approve_status filtering:
-        # approved: dp033.approvedate IS NOT NULL
-        # unapproved: dp033.approvedate IS NULL
-        if approve_status == 'approved':
+        if issuedate_from:
+            sql += " AND dp030.issuedate >= %s"
+            params.append(issuedate_from)
+        if issuedate_to:
+            sql += " AND dp030.issuedate <= %s"
+            params.append(issuedate_to)
+        if year:
+            sql += " AND dp030.year = %s"
+            params.append(year)
+        if ba055gkey:
+            sql += " AND dp030.ba055gkey = %s"
+            params.append(ba055gkey)
+        if stylename:
+            sql += " AND dp030.stylename ILIKE %s"
+            params.append(f"%{stylename}%")
+        if stock:
+            sql += " AND dp030.stock ILIKE %s"
+            params.append(f"%{stock}%")
+        if group:
+            if len(group) == 20 and group.isalnum():
+                sql += " AND dp030.dp023gkey = %s"
+                params.append(group)
+            else:
+                sql += " AND dp023.groupname ILIKE %s"
+                params.append(f"%{group}%")
+        if lastno:
+            sql += " AND dp010.lastno ILIKE %s"
+            params.append(f"%{lastno}%")
+        if bottomno:
+            sql += " AND dp015.bottomno ILIKE %s"
+            params.append(f"%{bottomno}%")
+        if heelno:
+            sql += " AND dp020.heelno ILIKE %s"
+            params.append(f"%{heelno}%")
+        if maker:
+            sql += " AND (es101.englishname ILIKE %s OR es101.chinesename ILIKE %s)"
+            params.extend([f"%{maker}%", f"%{maker}%"])
+        if custno:
+            sql += " AND ba010.custno ILIKE %s"
+            params.append(f"%{custno}%")
+        if factno:
+            sql += " AND ba015.factno ILIKE %s"
+            params.append(f"%{factno}%")
+        if brand:
+            sql += " AND (ba009.ebrand ILIKE %s OR ba009.cbrand ILIKE %s)"
+            params.extend([f"%{brand}%", f"%{brand}%"])
+        if ba005gkey:
+            sql += " AND dp030.ba005gkey = %s"
+            params.append(ba005gkey)
+        if sentdate_from:
+            sql += " AND dp040.sentdate >= %s"
+            params.append(sentdate_from)
+        if sentdate_to:
+            sql += " AND dp040.sentdate <= %s"
+            params.append(sentdate_to)
+        if invoiceno:
+            sql += " AND dp040.invoiceno ILIKE %s"
+            params.append(f"%{invoiceno}%")
+
+        # approve filtering:
+        if approve_status == 'Y' or approve_status == 'approved':
             sql += " AND dp033.approvedate IS NOT NULL"
-        elif approve_status == 'unapproved':
+        elif approve_status == 'N' or approve_status == 'unapproved':
             sql += " AND dp033.approvedate IS NULL"
 
-        # status_list multi-select handling
-        status_list_raw = request.query_params.getlist('status_list')
+        # status / status_list multi-select handling
+        status_list_raw = request.query_params.getlist('status') or request.query_params.getlist('status_list')
         if not status_list_raw:
-            status_str = request.query_params.get('status_list')
+            status_str = request.query_params.get('status') or request.query_params.get('status_list')
             if status_str:
                 status_list_raw = status_str.split(',')
 
@@ -3943,7 +4191,7 @@ class Dp095ViewSet(viewsets.ViewSet):
             sql += f" AND dp031.status IN ({placeholders})"
             params.extend(status_filter)
 
-        sql += " ORDER BY dp030.sampleno, dp031.styleno"
+        sql += " ORDER BY ba010.shortname, ba015.shortname, dp030.sampleno, dp031.styleno, dp033.serialno, dp040.sentdate"
 
         with connection.cursor() as cursor:
             cursor.execute(sql, params)
@@ -3953,16 +4201,34 @@ class Dp095ViewSet(viewsets.ViewSet):
         for r in rows:
             results.append({
                 'sampleno': r[0] or '',
-                'styleno': r[1] or '',
-                'color': r[2] or '',
-                'customer_shortname': r[3] or '',
-                'factory_shortname': r[4] or '',
-                'status': r[5] or '',
-                'approvedate': r[6].isoformat() if r[6] is not None else None,
-                'custpairs': float(r[7]) if r[7] is not None else 0.0,
-                'keeppairs': float(r[8]) if r[8] is not None else 0.0,
-                'sentpairs': float(r[9]) if r[9] is not None else 0.0,
-                'photopath': r[10] or '',
+                'issuedate': r[1].isoformat() if r[1] is not None else None,
+                'duedate': r[2].isoformat() if r[2] is not None else None,
+                'esampletype': r[3] or '',
+                'styleno': r[4] or '',
+                'stylename': r[5] or '',
+                'stock': r[6] or '',
+                'customer_shortname': r[7] or '',
+                'factory_shortname': r[8] or '',
+                'color': r[9] or '',
+                'upper': r[10] or '',
+                'size': r[11] or '',
+                'custpairs': float(r[12]) if r[12] is not None else 0.0,
+                'keeppairs': float(r[13]) if r[13] is not None else 0.0,
+                'sentpairs': float(r[14]) if r[14] is not None else 0.0,
+                'sentduedate': r[15].isoformat() if r[15] is not None else None,
+                'sentdate': r[16].isoformat() if r[16] is not None else None,
+                'approvedate': r[17].isoformat() if r[17] is not None else None,
+                'shipmentdt': r[18].isoformat() if r[18] is not None else None,
+                'invoiceno': r[19] or '',
+                'awbno': r[20] or '',
+                'scheduleremark': r[21] or '',
+                'status': r[22] or '',
+                'photopath': r[23] or '',
+                'year': r[24] or '',
+                'ba055gkey': r[25] or '',
+                'ba005gkey': r[26] or '',
+                'approve': r[27] or '',
+                'serialno': r[28] or 0,
             })
         return Response(results)
 
