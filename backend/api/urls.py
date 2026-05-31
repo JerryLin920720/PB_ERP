@@ -86,10 +86,18 @@ router.register(r'dp082', views.Dp082ViewSet, basename='dp082')
 router.register(r'dp100', views.Dp100ViewSet, basename='dp100')
 router.register(r'dp101', views.Dp101ViewSet, basename='dp101')
 
+router.register(r'dp060', views.Dp060ViewSet, basename='dp060')
+router.register(r'dp065', views.Dp065ViewSet, basename='dp065')
+router.register(r'dp070', views.Dp070ViewSet, basename='dp070')
+router.register(r'dp095', views.Dp095ViewSet, basename='dp095')
+
 router.register(r'mr001', views.Mr001ViewSet, basename='mr001')
 router.register(r'mr002', views.Mr002ViewSet, basename='mr002')
+router.register(r'mr015', views.Mr015ViewSet, basename='mr015')
+router.register(r'mr016', views.Mr016ViewSet, basename='mr016')
 router.register(r'mr020', views.Mr020ViewSet, basename='mr020')
 router.register(r'mr025', views.Mr025ViewSet, basename='mr025')
+router.register(r'mr030', views.Mr030ViewSet, basename='mr030')
 router.register(r'mr031', views.Mr031ViewSet, basename='mr031')
 
 
@@ -99,6 +107,7 @@ urlpatterns = [
     path('health/', views.system_health, name='system_health'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard_stats'),
     path('dashboard/analytics/', views.dashboard_analytics, name='dashboard_analytics'),
+    path('uploads/images/', views.upload_image, name='upload_image'),
     
     # 🔐 Authentication and Authorization Endpoints
     path('auth/login/', views.auth_login, name='auth_login'),
@@ -107,3 +116,4 @@ urlpatterns = [
     path('auth/permissions/', views.auth_permissions, name='auth_permissions'),
     path('auth/menu/', views.auth_menu, name='auth_menu'),
 ]
+

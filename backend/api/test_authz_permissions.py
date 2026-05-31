@@ -381,3 +381,93 @@ class AuthzPermissionsTests(APITestCase):
         response = self.client.get("/api/auth/menu/")
         self.assertEqual(response.status_code, 200)
 
+    def test_dp031_action_level_permissions_override(self):
+        from core import permissions, middleware
+        from rest_framework.authtoken.models import Token
+        
+        # 1. 模擬正式運行環境 (關閉 TESTING 自動放行)
+        orig_perm_testing = permissions.TESTING
+        orig_mw_testing = middleware.TESTING
+        permissions.TESTING = False
+        middleware.TESTING = False
+        
+        try:
+            django_user = self._get_django_user()
+            token, _ = Token.objects.get_or_create(user=django_user)
+            self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+            
+            # 建立正確登入之在線活躍記錄 (win_login="Web" 與帳號一致)
+            session = SysAccountsActive.objects.create(
+                gkey="test_session_active",
+                hisystem="01",
+                accounts_id="USER",
+                logintime=timezone.now(),
+                computername="WebBrowser",
+                loginip="127.0.0.1",
+                spid=9999,
+                win_login="Web"
+            )
+
+            # 建立 SysPopedomDesc 動作索引紀錄，供 get_permission_index 查找
+            SysPopedomDesc.objects.create(
+                popedom_id="search",
+                hisystem="01",
+                obj_name="w_dp030",
+                popedom_desc="查詢",
+                popedom_index=1
+            )
+            SysPopedomDesc.objects.create(
+                popedom_id="search",
+                hisystem="01",
+                obj_name="w_dp050",
+                popedom_desc="查詢",
+                popedom_index=1
+            )
+            
+            # --- 測試案例 A：有 w_dp030、無 w_dp050 權限 ---
+            SysPopedom.objects.filter(accounts_id="USER").delete()
+            # 僅賦予 w_dp030 查詢權限 (遮罩第 0 位為 1)
+            SysPopedom.objects.create(
+                accounts_id="USER",
+                obj_name="w_dp030",
+                prg_popedom="1" + "0"*19,
+                flag="10",
+                hisystem="01"
+            )
+            
+            # 呼叫一般 Dp031 CRUD (GET /api/dp031/) -> 成功
+            response = self.client.get("/api/dp031/")
+            self.assertEqual(response.status_code, 200)
+            
+            # 呼叫 dp050_query -> 403 (因為無 w_dp050 權限)
+            response = self.client.get("/api/dp031/dp050_query/")
+            self.assertEqual(response.status_code, 403)
+            
+            # --- 測試案例 B：有 w_dp050、無 w_dp030 權限 ---
+            SysPopedom.objects.filter(accounts_id="USER").delete()
+            # 僅賦予 w_dp050 查詢權限
+            SysPopedom.objects.create(
+                accounts_id="USER",
+                obj_name="w_dp050",
+                prg_popedom="1" + "0"*19,
+                flag="10",
+                hisystem="01"
+            )
+            
+            # 呼叫一般 Dp031 CRUD (GET /api/dp031/) -> 403 (因為無 w_dp030 權限)
+            response = self.client.get("/api/dp031/")
+            self.assertEqual(response.status_code, 403)
+            
+            # 呼叫 dp050_query -> 成功進入 (因為未傳 dp031gkey 回傳 400，但不是被 403 阻擋)
+            response = self.client.get("/api/dp031/dp050_query/")
+            self.assertNotEqual(response.status_code, 403)
+            
+            # --- 測試案例 C：在線 Session 被踢除 (ActiveSessionMiddleware 驗證) ---
+            session.delete()
+            response = self.client.get("/api/dp031/")
+            self.assertEqual(response.status_code, 401)
+            
+        finally:
+            permissions.TESTING = orig_perm_testing
+            middleware.TESTING = orig_mw_testing
+

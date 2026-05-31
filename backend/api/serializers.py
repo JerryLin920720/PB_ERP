@@ -919,6 +919,7 @@ class Mr016Serializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """同一大類底下，小類代號不可重複"""
+        print('[MR016 SERIALIZER VALIDATE INPUT DATA]', data)
         mr015gkey = data.get('mr015gkey') or getattr(getattr(self, 'instance', None), 'mr015gkey', None)
         smatno = data.get('smatno')
         if mr015gkey and smatno:

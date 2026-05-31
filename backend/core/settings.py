@@ -60,6 +60,9 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "core.permissions.HasProgramPermission",
+    ],
 }
 
 MIDDLEWARE = [
@@ -69,9 +72,12 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.ActiveSessionMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+ENABLE_ACTIVE_SESSION_CHECK = True
 
 ROOT_URLCONF = "core.urls"
 

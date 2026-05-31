@@ -1,6 +1,8 @@
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from core.permissions import HasProgramPermission
 from django.db.models import Max
 from django.db import transaction, IntegrityError
 from .models import (
@@ -15,7 +17,7 @@ from .models import (
     Dp025, Dp026, Dp027, Dp028,
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
     Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
-    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031
+    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031, Mr035
 )
 from .serializers import (
     Ab230Serializer, Ab231Serializer,
@@ -38,6 +40,7 @@ from .serializers import (
 )
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def system_health(request):
     return Response({
         "status": "online",
@@ -47,6 +50,7 @@ def system_health(request):
     }, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     return Response({
         "success": True,
@@ -64,6 +68,7 @@ class Ba001ViewSet(viewsets.ModelViewSet):
     """
     個人片語字庫 API 視圖，全面還原 PB 業務邏輯 (特規：具有 ADMIN 人員資料隔離)
     """
+    program_id = 'w_ba001'
     serializer_class = Ba001Serializer
     
     def get_queryset(self):
@@ -198,56 +203,68 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
 # 💎 具體實作：極速宣告
 class Ba002ViewSet(BaseDictionaryViewSet):
     """國家基本資料"""
+    program_id = 'w_ba002'
     queryset = Ba002.objects.all()
     serializer_class = Ba002Serializer
 
 class Ba003ViewSet(BaseDictionaryViewSet):
     """產地基本資料"""
+    program_id = 'w_ba003'
     queryset = Ba003.objects.all()
     serializer_class = Ba003Serializer
 
 class Ba004ViewSet(BaseDictionaryViewSet):
     """區域基本資料"""
+    program_id = 'w_ba004'
     queryset = Ba004.objects.all()
     serializer_class = Ba004Serializer
 
 class Ba005ViewSet(viewsets.ModelViewSet):
     """公司基本資料設定 (標準 REST，因為無 serialno 且有特規 Form)"""
+    program_id = 'w_ba005'
     queryset = Ba005.objects.all()
     serializer_class = Ba005Serializer
 
 class Ba009ViewSet(BaseDictionaryViewSet):
     """品牌資料"""
+    program_id = 'w_ba009'
     queryset = Ba009.objects.all()
     serializer_class = Ba009Serializer
 
 class Ba020ViewSet(BaseDictionaryViewSet):
     """材料供應商類別設定"""
+    program_id = 'w_ba020'
     queryset = Ba020.objects.all()
     serializer_class = Ba020Serializer
 
 class Ba040ViewSet(viewsets.ModelViewSet):
     """銀行基本資料設定 (標準 REST)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_ba040'
     queryset = Ba040.objects.all()
     serializer_class = Ba040Serializer
 
 class Ba045ViewSet(BaseDictionaryViewSet):
     """部門設定"""
+    program_id = 'w_ba045'
     queryset = Ba045.objects.all()
     serializer_class = Ba045Serializer
 
 class Ba050ViewSet(BaseDictionaryViewSet):
     """職務設定"""
+    program_id = 'w_ba050'
     queryset = Ba050.objects.all()
     serializer_class = Ba050Serializer
 
 class Ba055ViewSet(BaseDictionaryViewSet):
     """季節設定"""
+    program_id = 'w_ba055'
     queryset = Ba055.objects.all()
     serializer_class = Ba055Serializer
 
 class Ba060ViewSet(viewsets.ModelViewSet):
     """全域幣別主檔"""
+    program_id = 'w_ba060'
     queryset = Ba060.objects.all()
     serializer_class = Ba060Serializer
 
@@ -257,6 +274,7 @@ class Ba060ViewSet(viewsets.ModelViewSet):
 
 class Ba061ViewSet(viewsets.ModelViewSet):
     """全域幣別歷史匯率"""
+    program_id = 'w_ba060'  # 明細：隸屬幣別主檔作業
     queryset = Ba061.objects.all()
     serializer_class = Ba061Serializer
 
@@ -295,42 +313,51 @@ class Ab231ViewSet(viewsets.ModelViewSet):
 
 class Ba065ViewSet(BaseDictionaryViewSet):
     """交易港口"""
+    program_id = 'w_ba065'
     queryset = Ba065.objects.all()
     serializer_class = Ba065Serializer
 
 class Ba070ViewSet(BaseDictionaryViewSet):
     """交易條件"""
+    program_id = 'w_ba070'
     queryset = Ba070.objects.all()
     serializer_class = Ba070Serializer
 
 class Ba075ViewSet(BaseDictionaryViewSet):
     """付款條件大類"""
+    program_id = 'w_ba075'
     queryset = Ba075.objects.all()
     serializer_class = Ba075Serializer
 
 class Ba080ViewSet(BaseDictionaryViewSet):
     """配件設定"""
+    program_id = 'w_ba080'
     queryset = Ba080.objects.all()
     serializer_class = Ba080Serializer
 
 class Ba090ViewSet(BaseDictionaryViewSet):
     """快遞公司"""
+    program_id = 'w_ba090'
     queryset = Ba090.objects.all()
     serializer_class = Ba090Serializer
 
 class Ba091ViewSet(BaseDictionaryViewSet):
     """運輸方式"""
+    program_id = 'w_ba091'
     queryset = Ba091.objects.all()
     serializer_class = Ba091Serializer
 
 class Ba092ViewSet(BaseDictionaryViewSet):
     """單位設定"""
+    program_id = 'w_ba092'
     queryset = Ba092.objects.all()
     serializer_class = Ba092Serializer
 
 
 class Ba015ViewSet(viewsets.ModelViewSet):
     """供應鏈實體 (工廠/材料商/供應商) 三合一多態 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    # program_id 於 core.permissions.HasProgramPermission 中根據 type 動態判定為 w_ba015 / w_ba025 / w_ba030
     queryset = Ba015.objects.all()
     serializer_class = Ba015Serializer
 
@@ -448,7 +475,8 @@ class Ba015ViewSet(viewsets.ModelViewSet):
 
 
 class Ba016ViewSet(viewsets.ModelViewSet):
-    """統一聯絡人 ViewSet"""
+    """統一聯絡人 ViewSet (明細：隸屬 Ba015 工廠/材料商/供應商作業)"""
+    program_id = 'w_ba015'  # 明細：預設對應工廠資料管理；type 2→w_ba025, type 3→w_ba030 由上層 Ba015ViewSet 處理
     queryset = Ba016.objects.all()
     serializer_class = Ba016Serializer
 
@@ -462,6 +490,8 @@ class Ba016ViewSet(viewsets.ModelViewSet):
 
 class Ba010ViewSet(viewsets.ModelViewSet):
     """製鞋客戶大主檔 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_ba010'
     queryset = Ba010.objects.all()
     serializer_class = Ba010Serializer
 
@@ -575,7 +605,8 @@ class Ba010ViewSet(viewsets.ModelViewSet):
 
 
 class Ba011ViewSet(viewsets.ModelViewSet):
-    """客戶經營品牌 ViewSet"""
+    """客戶經營品牌 ViewSet (明細：隸屬客戶資料管理)"""
+    program_id = 'w_ba010'  # 明細：隸屬 Ba010 客戶大主檔作業
     queryset = Ba011.objects.all()
     serializer_class = Ba011Serializer
 
@@ -588,7 +619,8 @@ class Ba011ViewSet(viewsets.ModelViewSet):
 
 
 class Ba012ViewSet(viewsets.ModelViewSet):
-    """客戶 QC 驗貨官 ViewSet"""
+    """客戶 QC 驗貨官 ViewSet (明細：隸屬客戶資料管理)"""
+    program_id = 'w_ba010'  # 明細：隸屬 Ba010 客戶大主檔作業
     queryset = Ba012.objects.all()
     serializer_class = Ba012Serializer
 
@@ -601,7 +633,8 @@ class Ba012ViewSet(viewsets.ModelViewSet):
 
 
 class Ba013ViewSet(viewsets.ModelViewSet):
-    """客戶提供配件 ViewSet"""
+    """客戶提供配件 ViewSet (明細：隸屬客戶資料管理)"""
+    program_id = 'w_ba010'  # 明細：隸屬 Ba010 客戶大主檔作業
     queryset = Ba013.objects.all()
     serializer_class = Ba013Serializer
 
@@ -619,7 +652,8 @@ class Ba013ViewSet(viewsets.ModelViewSet):
 
 
 class Ba014ViewSet(viewsets.ModelViewSet):
-    """客戶業務聯絡人 ViewSet"""
+    """客戶業務聯絡人 ViewSet (明細：隸屬客戶資料管理)"""
+    program_id = 'w_ba010'  # 明細：隸屬 Ba010 客戶大主檔作業
     queryset = Ba014.objects.all()
     serializer_class = Ba014Serializer
 
@@ -633,6 +667,7 @@ class Ba014ViewSet(viewsets.ModelViewSet):
 
 class Ba085ViewSet(viewsets.ModelViewSet):
     """SIZERUN 尺碼設定 ViewSet"""
+    program_id = 'w_ba085'
     queryset = Ba085.objects.all()
     serializer_class = Ba085Serializer
 
@@ -649,6 +684,7 @@ class SysAccountViewSet(viewsets.ModelViewSet):
 
 class Es101ViewSet(viewsets.ModelViewSet):
     """員工帳號基本資料 ViewSet"""
+    program_id = 'w_es101'
     queryset = Es101.objects.all()
     serializer_class = Es101Serializer
 
@@ -763,7 +799,8 @@ class Es101ViewSet(viewsets.ModelViewSet):
 
 
 class Es102ViewSet(viewsets.ModelViewSet):
-    """員工學歷 ViewSet"""
+    """員工學歷 ViewSet (明細：隸屬員工資料管理)"""
+    program_id = 'w_es101'  # 明細：隸屬 Es101 員工帳號主檔
     queryset = Es102.objects.all()
     serializer_class = Es102Serializer
 
@@ -776,7 +813,8 @@ class Es102ViewSet(viewsets.ModelViewSet):
 
 
 class Es103ViewSet(viewsets.ModelViewSet):
-    """員工經歷 ViewSet"""
+    """員工經歷 ViewSet (明細：隸屬員工資料管理)"""
+    program_id = 'w_es101'  # 明細：隸屬 Es101 員工帳號主檔
     queryset = Es103.objects.all()
     serializer_class = Es103Serializer
 
@@ -789,7 +827,8 @@ class Es103ViewSet(viewsets.ModelViewSet):
 
 
 class Es104ViewSet(viewsets.ModelViewSet):
-    """員工眷屬 ViewSet"""
+    """員工眷屬 ViewSet (明細：隸屬員工資料管理)"""
+    program_id = 'w_es101'  # 明細：隸屬 Es101 員工帳號主檔
     queryset = Es104.objects.all()
     serializer_class = Es104Serializer
 
@@ -810,6 +849,7 @@ class Dp001ViewSet(BaseDictionaryViewSet):
     開發片語字庫 API，模仿 ba001 支援個人隔離，
     因為繼承 BaseDictionaryViewSet，自帶高度相容 PB 的 bulk_save 髒交易存檔演算法。
     """
+    program_id = 'w_dp001'
     queryset = Dp001.objects.all()
     serializer_class = Dp001Serializer
 
@@ -861,18 +901,21 @@ class Dp001ViewSet(BaseDictionaryViewSet):
 
 class Dp002ViewSet(BaseDictionaryViewSet):
     """樣品類別設定 ViewSet"""
+    program_id = 'w_dp002'
     queryset = Dp002.objects.all()
     serializer_class = Dp002Serializer
 
 
 class Dp003ViewSet(BaseDictionaryViewSet):
     """鞋種類別設定 ViewSet"""
+    program_id = 'w_dp003'
     queryset = Dp003.objects.all()
     serializer_class = Dp003Serializer
 
 
 class Dp004ViewSet(BaseDictionaryViewSet):
     """鞋種性別 Size Type ViewSet (Master)"""
+    program_id = 'w_dp004'
     queryset = Dp004.objects.all()
     serializer_class = Dp004Serializer
 
@@ -959,31 +1002,36 @@ class Dp004ViewSet(BaseDictionaryViewSet):
             return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class Dp004AViewSet(BaseDictionaryViewSet):
-    """鞋種性別尺碼對照表 ViewSet"""
+    """鞋種性別尺碼對照表 ViewSet (明細：隸屬 Size Type 設定)"""
+    program_id = 'w_dp004'  # 明細：隸屬 Dp004 鞋種性別主檔作業
     queryset = Dp004A.objects.all()
     serializer_class = Dp004ASerializer
 
 
 class Dp005ViewSet(BaseDictionaryViewSet):
     """部位類別設定 ViewSet"""
+    program_id = 'w_dp005'
     queryset = Dp005.objects.all()
     serializer_class = Dp005Serializer
 
 
 class Dp006ViewSet(BaseDictionaryViewSet):
     """部位基本資料 ViewSet"""
+    program_id = 'w_dp006'
     queryset = Dp006.objects.all()
     serializer_class = Dp006Serializer
 
 
 class Dp008ViewSet(BaseDictionaryViewSet):
     """Sock Label 設定 ViewSet"""
+    program_id = 'w_dp008'
     queryset = Dp008.objects.all()
     serializer_class = Dp008Serializer
 
 
 class Dp009ViewSet(BaseDictionaryViewSet):
     """部件加工方式設定 ViewSet"""
+    program_id = 'w_dp009'
     queryset = Dp009.objects.all()
     serializer_class = Dp009Serializer
 
@@ -993,6 +1041,7 @@ class Dp007ViewSet(viewsets.ModelViewSet):
     鞋種部位設定 ViewSet (Master-Detail 多對多關聯維護)
     支持針對鞋種篩選明細，並提供原子級一鍵覆蓋同步功能
     """
+    program_id = 'w_dp007'
     queryset = Dp007.objects.all()
     serializer_class = Dp007Serializer
 
@@ -1035,6 +1084,8 @@ class Dp007ViewSet(viewsets.ModelViewSet):
 
 class Dp010ViewSet(viewsets.ModelViewSet):
     """楦頭基本資料 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp010'
     queryset = Dp010.objects.all()
     serializer_class = Dp010Serializer
 
@@ -1164,6 +1215,8 @@ class Dp010ViewSet(viewsets.ModelViewSet):
 
 class Dp015ViewSet(viewsets.ModelViewSet):
     """大底基本資料 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp015'
     queryset = Dp015.objects.all()
     serializer_class = Dp015Serializer
 
@@ -1285,6 +1338,8 @@ class Dp015ViewSet(viewsets.ModelViewSet):
 
 class Dp020ViewSet(BaseDictionaryViewSet):
     """鞋跟基本資料 ViewSet (高保真搜索版本)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp020'
     queryset = Dp020.objects.all()
     serializer_class = Dp020Serializer
 
@@ -1324,7 +1379,8 @@ class Dp020ViewSet(BaseDictionaryViewSet):
 
 
 class Dp016ViewSet(BaseDictionaryViewSet):
-    """大底配模明細 dp016"""
+    """大底配模明細 dp016 (明細：隸屬大底基本資料)"""
+    program_id = 'w_dp015'  # 明細：隸屬 Dp015 大底主檔作業
     queryset = Dp016.objects.all()
     serializer_class = Dp016Serializer
 
@@ -1337,7 +1393,8 @@ class Dp016ViewSet(BaseDictionaryViewSet):
 
 
 class Dp017ViewSet(BaseDictionaryViewSet):
-    """大底攤提費用 dp017"""
+    """大底攤提費用 dp017 (明細：隸屬大底基本資料)"""
+    program_id = 'w_dp015'  # 明細：隸屬 Dp015 大底主檔作業
     queryset = Dp017.objects.all()
     serializer_class = Dp017Serializer
 
@@ -1353,7 +1410,8 @@ class Dp017ViewSet(BaseDictionaryViewSet):
 
 
 class Dp018ViewSet(BaseDictionaryViewSet):
-    """大底尺碼展開配量 dp018"""
+    """大底尺碼展開配量 dp018 (明細：隸屬大底基本資料)"""
+    program_id = 'w_dp015'  # 明細：隸屬 Dp015 大底主檔作業
     queryset = Dp018.objects.all()
     serializer_class = Dp018Serializer
 
@@ -1369,7 +1427,8 @@ class Dp018ViewSet(BaseDictionaryViewSet):
 
 
 class Dp011ViewSet(BaseDictionaryViewSet):
-    """楦頭量法基本資料 dp011"""
+    """楦頭量法基本資料 dp011 (明細：隸屬楦頭基本資料)"""
+    program_id = 'w_dp010'  # 明細：隸屬 Dp010 楦頭主檔作業
     queryset = Dp011.objects.all()
     serializer_class = Dp011Serializer
 
@@ -1382,7 +1441,8 @@ class Dp011ViewSet(BaseDictionaryViewSet):
 
 
 class Dp012ViewSet(BaseDictionaryViewSet):
-    """楦頭尺碼明細量值 dp012"""
+    """楦頭尺碼明細量值 dp012 (明細：隸屬楦頭基本資料)"""
+    program_id = 'w_dp010'  # 明細：隸屬 Dp010 楦頭主檔作業
     queryset = Dp012.objects.all()
     serializer_class = Dp012Serializer
 
@@ -1398,7 +1458,8 @@ class Dp012ViewSet(BaseDictionaryViewSet):
 
 
 class Dp013ViewSet(BaseDictionaryViewSet):
-    """楦頭修改紀錄 dp013"""
+    """楦頭修改紀錄 dp013 (明細：隸屬楦頭基本資料)"""
+    program_id = 'w_dp010'  # 明細：隸屬 Dp010 楦頭主檔作業
     queryset = Dp013.objects.all()
     serializer_class = Dp013Serializer
 
@@ -1411,7 +1472,8 @@ class Dp013ViewSet(BaseDictionaryViewSet):
 
 
 class Dp014ViewSet(BaseDictionaryViewSet):
-    """楦頭庫存明細 dp014"""
+    """楦頭庫存明細 dp014 (明細：隸屬楦頭基本資料)"""
+    program_id = 'w_dp010'  # 明細：隸屬 Dp010 楦頭主檔作業
     queryset = Dp014.objects.all()
     serializer_class = Dp014Serializer
 
@@ -1425,6 +1487,7 @@ class Dp014ViewSet(BaseDictionaryViewSet):
 
 class Dp023ViewSet(BaseDictionaryViewSet):
     """組別基本資料 dp023"""
+    program_id = 'w_dp023'
     queryset = Dp023.objects.all()
     serializer_class = Dp023Serializer
 
@@ -1438,6 +1501,8 @@ class Dp023ViewSet(BaseDictionaryViewSet):
 
 class Dp025ViewSet(BaseDictionaryViewSet):
     """型體基本資料主檔 dp025"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp025'
     queryset = Dp025.objects.all()
     serializer_class = Dp025Serializer
 
@@ -1546,7 +1611,8 @@ class Dp025ViewSet(BaseDictionaryViewSet):
 
 
 class Dp026ViewSet(BaseDictionaryViewSet):
-    """型體報價細項 dp026"""
+    """型體報價細項 dp026 (明細：隸屬型體基本資料 BOM)"""
+    program_id = 'w_dp025'  # 明細：隸屬 Dp025 型體主檔作業
     queryset = Dp026.objects.all()
     serializer_class = Dp026Serializer
 
@@ -1559,7 +1625,8 @@ class Dp026ViewSet(BaseDictionaryViewSet):
 
 
 class Dp027ViewSet(BaseDictionaryViewSet):
-    """型體技轉資料 dp027"""
+    """型體技轉資料 dp027 (明細：隸屬型體基本資料 BOM)"""
+    program_id = 'w_dp025'  # 明細：隸屬 Dp025 型體主檔作業
     queryset = Dp027.objects.all()
     serializer_class = Dp027Serializer
 
@@ -1572,7 +1639,8 @@ class Dp027ViewSet(BaseDictionaryViewSet):
 
 
 class Dp028ViewSet(BaseDictionaryViewSet):
-    """型體技術配件細項 dp028"""
+    """型體技術配件細項 dp028 (明細：隸屬型體基本資料 BOM)"""
+    program_id = 'w_dp025'  # 明細：隸屬 Dp025 型體主檔作業
     queryset = Dp028.objects.all()
     serializer_class = Dp028Serializer
 
@@ -1631,6 +1699,12 @@ def generate_dp030_sampleno(year, ba055gkey):
 
 class Dp030ViewSet(BaseDictionaryViewSet):
     """樣品單主檔 dp030"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp030'
+    action_program_map = {
+        'outstanding_samples': 'w_dp032',
+        'label_samples': 'w_dp035',
+    }
     queryset = Dp030.objects.all()
     serializer_class = Dp030Serializer
 
@@ -2113,6 +2187,12 @@ class Dp030ViewSet(BaseDictionaryViewSet):
 
 class Dp031ViewSet(BaseDictionaryViewSet):
     """樣品配色明細 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp030'
+    action_program_map = {
+        'dp050_query': 'w_dp050',
+        'batch_save': 'w_dp050',
+    }
     queryset = Dp031.objects.all()
     serializer_class = Dp031Serializer
 
@@ -2386,7 +2466,8 @@ class Dp031ViewSet(BaseDictionaryViewSet):
 
 
 class Dp032ViewSet(BaseDictionaryViewSet):
-    """樣品部位材料明細 ViewSet"""
+    """樣品部位材料明細 ViewSet (明細：隸屬樣品單資料管理)"""
+    program_id = 'w_dp030'  # 明細：隸屬 Dp030 樣品單主檔作業
     queryset = Dp032.objects.all()
     serializer_class = Dp032Serializer
 
@@ -2400,6 +2481,11 @@ class Dp032ViewSet(BaseDictionaryViewSet):
 
 class Dp033ViewSet(BaseDictionaryViewSet):
     """樣品配色尺碼配比 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp030'
+    action_program_map = {
+        'dp050_sizes': 'w_dp050',
+    }
     queryset = Dp033.objects.all()
     serializer_class = Dp033Serializer
 
@@ -2509,7 +2595,8 @@ class Dp033ViewSet(BaseDictionaryViewSet):
 
 
 class Dp034ViewSet(BaseDictionaryViewSet):
-    """樣品加工明細 ViewSet"""
+    """樣品加工明細 ViewSet (明細：隸屬樣品單資料管理)"""
+    program_id = 'w_dp030'  # 明細：隸屬 Dp030 樣品單主檔作業
     queryset = Dp034.objects.all()
     serializer_class = Dp034Serializer
 
@@ -2522,7 +2609,8 @@ class Dp034ViewSet(BaseDictionaryViewSet):
 
 
 class Dp035ViewSet(BaseDictionaryViewSet):
-    """樣品大底履歷 ViewSet"""
+    """樣品大底履歷 ViewSet (明細：隸屬樣品單資料管理)"""
+    program_id = 'w_dp030'  # 明細：隸屬 Dp030 樣品單主檔作業
     queryset = Dp035.objects.all()
     serializer_class = Dp035Serializer
 
@@ -2535,7 +2623,8 @@ class Dp035ViewSet(BaseDictionaryViewSet):
 
 
 class Dp104ViewSet(BaseDictionaryViewSet):
-    """樣品進度追蹤 ViewSet"""
+    """樣品進度追蹤 ViewSet (明細：隸屬樣品單資料管理)"""
+    program_id = 'w_dp030'  # 明細：隸屬 Dp030 樣品單主檔作業
     queryset = Dp104.objects.all()
     serializer_class = Dp104Serializer
 
@@ -2549,6 +2638,8 @@ class Dp104ViewSet(BaseDictionaryViewSet):
 
 class Dp040ViewSet(viewsets.ModelViewSet):
     """樣品出貨單主檔 ViewSet"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp040'
     queryset = Dp040.objects.all()
     serializer_class = Dp040Serializer
 
@@ -2885,7 +2976,8 @@ class Dp040ViewSet(viewsets.ModelViewSet):
 
 
 class Dp041ViewSet(BaseDictionaryViewSet):
-    """樣品出貨明細 ViewSet"""
+    """樣品出貨明細 ViewSet (明細：隸屬樣品出貨單管理)"""
+    program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp041.objects.all()
     serializer_class = Dp041Serializer
 
@@ -2898,7 +2990,8 @@ class Dp041ViewSet(BaseDictionaryViewSet):
 
 
 class Dp042ViewSet(BaseDictionaryViewSet):
-    """樣品出貨重量規格 ViewSet"""
+    """樣品出貨重量規格 ViewSet (明細：隸屬樣品出貨單管理)"""
+    program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp042.objects.all()
     serializer_class = Dp042Serializer
 
@@ -2911,7 +3004,8 @@ class Dp042ViewSet(BaseDictionaryViewSet):
 
 
 class Dp043ViewSet(BaseDictionaryViewSet):
-    """樣品出貨裝箱 ViewSet"""
+    """樣品出貨裝箱 ViewSet (明細：隸屬樣品出貨單管理)"""
+    program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp043.objects.all()
     serializer_class = Dp043Serializer
 
@@ -2925,6 +3019,7 @@ class Dp043ViewSet(BaseDictionaryViewSet):
 
 class Dp080ViewSet(BaseDictionaryViewSet):
     """樣品試版評語與確認主檔 ViewSet"""
+    program_id = 'w_dp080'
     queryset = Dp080.objects.all()
     serializer_class = Dp080Serializer
 
@@ -3020,6 +3115,8 @@ class Dp080ViewSet(BaseDictionaryViewSet):
 
 
 class Dp081ViewSet(BaseDictionaryViewSet):
+    """試版意見明細 ViewSet (明細：隸屬試版評語主檔)"""
+    program_id = 'w_dp080'  # 明細：隸屬 Dp080 試版評語主檔作業
     queryset = Dp081.objects.all()
     serializer_class = Dp081Serializer
 
@@ -3032,6 +3129,8 @@ class Dp081ViewSet(BaseDictionaryViewSet):
 
 
 class Dp082ViewSet(BaseDictionaryViewSet):
+    """試版量測明細 ViewSet (明細：隸屬試版評語主檔)"""
+    program_id = 'w_dp080'  # 明細：隸屬 Dp080 試版評語主檔作業
     queryset = Dp082.objects.all()
     serializer_class = Dp082Serializer
 
@@ -3045,6 +3144,7 @@ class Dp082ViewSet(BaseDictionaryViewSet):
 
 class Dp100ViewSet(BaseDictionaryViewSet):
     """開發費用轉嫁單 ViewSet"""
+    program_id = 'w_dp100'
     queryset = Dp100.objects.all()
     serializer_class = Dp100Serializer
 
@@ -3122,6 +3222,8 @@ class Dp100ViewSet(BaseDictionaryViewSet):
 
 
 class Dp101ViewSet(BaseDictionaryViewSet):
+    """開發費用轉假單明細 ViewSet (明細：隸屬開發費用轉假管理)"""
+    program_id = 'w_dp100'  # 明細：隸屬 Dp100 開發費用轉假主檔作業
     queryset = Dp101.objects.all()
     serializer_class = Dp101Serializer
 
@@ -3136,6 +3238,7 @@ class Dp101ViewSet(BaseDictionaryViewSet):
 from django.db.models import Count, Sum
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_analytics(request):
     """
     📊 [量產投產決策看板數據端點] (DP060~DP070):
@@ -3166,7 +3269,8 @@ def dashboard_analytics(request):
 
 
 class Ba076ViewSet(viewsets.ModelViewSet):
-    """付款條件明細"""
+    """付款條件明細 (明細：隸屬付款條件設定)"""
+    program_id = 'w_ba075'  # 明細：隸屬 Ba075 付款條件大類作業
     queryset = Ba076.objects.all()
     serializer_class = Ba076Serializer
 
@@ -3180,6 +3284,8 @@ class Ba076ViewSet(viewsets.ModelViewSet):
 
 class Mr001ViewSet(BaseDictionaryViewSet):
     """資材片語字庫設定 (MR001)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr001'
     queryset = Phrase.objects.all()
     serializer_class = PhraseSerializer
 
@@ -3189,6 +3295,7 @@ class Mr001ViewSet(BaseDictionaryViewSet):
     def perform_create(self, serializer):
         serializer.save(f2type='MR')
 
+    @action(detail=False, methods=['post'], url_path='bulk_save')
     def bulk_save(self, request):
         if 'upsert' in request.data:
             for item in request.data['upsert']:
@@ -3198,26 +3305,224 @@ class Mr001ViewSet(BaseDictionaryViewSet):
 
 class Mr002ViewSet(BaseDictionaryViewSet):
     """顏色大類設定 (MR002)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr002'
     queryset = Mr002.objects.all()
     serializer_class = Mr002Serializer
 
 
 class Mr020ViewSet(BaseDictionaryViewSet):
     """材料厚度設定 (MR020)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr020'
     queryset = Mr020.objects.all()
     serializer_class = Mr020Serializer
 
 
 class Mr025ViewSet(BaseDictionaryViewSet):
     """材料幅度設定 (MR025)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr025'
     queryset = Mr025.objects.all()
     serializer_class = Mr025Serializer
 
 
 class Mr031ViewSet(BaseDictionaryViewSet):
     """加工方式設定 (MR031)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr031'
     queryset = Mr031.objects.all()
     serializer_class = Mr031Serializer
+
+
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.exceptions import ValidationError
+from rest_framework.decorators import parser_classes
+import os
+import uuid
+
+from django.db import DatabaseError
+
+def check_mr035_exists_and_filter(**kwargs):
+    try:
+        return Mr035.objects.filter(**kwargs).exists()
+    except DatabaseError as e:
+        err_msg = str(e).lower()
+        if 'relation "mr035" does not exist' in err_msg or 'no such table: mr035' in err_msg or ('relation' in err_msg and 'not exist' in err_msg):
+            # If the mr035 table doesn't exist locally yet, assume no references exist
+            return False
+        raise
+
+class Mr015ViewSet(BaseDictionaryViewSet):
+    """材料大類設定 (MR015)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr015'
+    queryset = Mr015.objects.all()
+    serializer_class = Mr015Serializer
+
+    def perform_destroy(self, instance):
+        if check_mr035_exists_and_filter(mr015gkey=instance.gkey):
+            raise ValidationError("此材料大類已被料號主檔引用，不可刪除！")
+        super().perform_destroy(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        if 'matno' in serializer.validated_data and serializer.validated_data['matno'] != instance.matno:
+            if check_mr035_exists_and_filter(mr015gkey=instance.gkey):
+                raise ValidationError("此材料大類已被料號主檔引用，不可修改大類代號！")
+        super().perform_update(serializer)
+
+    @action(detail=False, methods=['post'], url_path='bulk_save')
+    def bulk_save(self, request):
+        delete_keys = request.data.get('delete', [])
+        upsert_data = request.data.get('upsert', [])
+
+        if delete_keys:
+            if check_mr035_exists_and_filter(mr015gkey__in=delete_keys):
+                raise ValidationError("有材料大類已被料號主檔引用，不可刪除！")
+
+        for item in upsert_data:
+            gkey = item.get('gkey')
+            if gkey and not str(gkey).startswith('temp_'):
+                try:
+                    instance = Mr015.objects.get(gkey=gkey)
+                    new_matno = item.get('matno')
+                    if new_matno and new_matno != instance.matno:
+                        if check_mr035_exists_and_filter(mr015gkey=gkey):
+                            raise ValidationError(f"材料大類 '{instance.matno}' 已被料號主檔引用，不可修改大類代號！")
+                except Mr015.DoesNotExist:
+                    pass
+
+        return super().bulk_save(request)
+
+
+class Mr016ViewSet(BaseDictionaryViewSet):
+    """材料小類設定 (MR016)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr015'
+    queryset = Mr016.objects.all()
+    serializer_class = Mr016Serializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        mr015gkey = self.request.query_params.get('mr015gkey')
+        if mr015gkey:
+            qs = qs.filter(mr015gkey=mr015gkey)
+        return qs
+
+    def perform_destroy(self, instance):
+        if check_mr035_exists_and_filter(mr016gkey=instance.gkey):
+            raise ValidationError("此材料小類已被料號主檔引用，不可刪除！")
+        super().perform_destroy(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        if 'smatno' in serializer.validated_data and serializer.validated_data['smatno'] != instance.smatno:
+            if check_mr035_exists_and_filter(mr016gkey=instance.gkey):
+                raise ValidationError("此材料小類已被料號主檔引用，不可修改小類代號！")
+        super().perform_update(serializer)
+
+    @action(detail=False, methods=['post'], url_path='bulk_save')
+    def bulk_save(self, request):
+        print('[MR016 REQUEST DATA]', request.data)
+        delete_keys = request.data.get('delete', [])
+        upsert_data = request.data.get('upsert', [])
+
+        if delete_keys:
+            if check_mr035_exists_and_filter(mr016gkey__in=delete_keys):
+                raise ValidationError("有材料小類已被料號主檔引用，不可刪除！")
+
+        for item in upsert_data:
+            gkey = item.get('gkey')
+            if gkey and not str(gkey).startswith('temp_'):
+                try:
+                    instance = Mr016.objects.get(gkey=gkey)
+                    new_smatno = item.get('smatno')
+                    if new_smatno and new_smatno != instance.smatno:
+                        if check_mr035_exists_and_filter(mr016gkey=gkey):
+                            raise ValidationError(f"材料小類 '{instance.smatno}' 已被料號主檔引用，不可修改小類代號！")
+                except Mr016.DoesNotExist:
+                    pass
+
+        return super().bulk_save(request)
+
+
+class Mr030ViewSet(BaseDictionaryViewSet):
+    """材料紋路設定 (MR030)"""
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_mr030'
+    queryset = Mr030.objects.all()
+    serializer_class = Mr030Serializer
+
+    def perform_destroy(self, instance):
+        if check_mr035_exists_and_filter(mr030gkey=instance.gkey):
+            raise ValidationError("此材料紋路已被料號主檔引用，不可刪除！")
+        super().perform_destroy(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        if 'veinno' in serializer.validated_data and serializer.validated_data['veinno'] != instance.veinno:
+            if check_mr035_exists_and_filter(mr030gkey=instance.gkey):
+                raise ValidationError("此材料紋路已被料號主檔引用，不可修改紋路代號！")
+        super().perform_update(serializer)
+
+    @action(detail=False, methods=['post'], url_path='bulk_save')
+    def bulk_save(self, request):
+        delete_keys = request.data.get('delete', [])
+        upsert_data = request.data.get('upsert', [])
+
+        if delete_keys:
+            if check_mr035_exists_and_filter(mr030gkey__in=delete_keys):
+                raise ValidationError("有材料紋路已被料號主檔引用，不可刪除！")
+
+        for item in upsert_data:
+            gkey = item.get('gkey')
+            if gkey and not str(gkey).startswith('temp_'):
+                try:
+                    instance = Mr030.objects.get(gkey=gkey)
+                    new_veinno = item.get('veinno')
+                    if new_veinno and new_veinno != instance.veinno:
+                        if check_mr035_exists_and_filter(mr030gkey=gkey):
+                            raise ValidationError(f"材料紋路 '{instance.veinno}' 已被料號主檔引用，不可修改紋路代號！")
+                except Mr030.DoesNotExist:
+                    pass
+
+        return super().bulk_save(request)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def upload_image(request):
+    file_obj = request.FILES.get('file') or request.FILES.get('image')
+    if not file_obj:
+        return Response({"detail": "未收到檔案。"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    content_type = file_obj.content_type
+    if not content_type or not content_type.startswith('image/'):
+        return Response({"detail": "檔案類型必須是圖片。"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if file_obj.size > 5 * 1024 * 1024:
+        return Response({"detail": "圖片大小不能超過 5MB。"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    ext = os.path.splitext(file_obj.name)[1]
+    filename = f"img_{uuid.uuid4().hex}{ext}"
+    relative_path = f"uploads/{filename}"
+    
+    path = default_storage.save(relative_path, ContentFile(file_obj.read()))
+    
+    media_url = settings.MEDIA_URL
+    full_url = request.build_absolute_uri(f"{media_url}{path}")
+    
+    return Response({
+        "url": full_url,
+        "path": path,
+        "filename": filename
+    })
+
 
 
 class Mr010ViewSet(viewsets.ViewSet):
@@ -3245,12 +3550,431 @@ class Mr035ViewSet(viewsets.ViewSet):
 
 
 # ============================================================================
+# 👞 DP 模組第一批 Pattern R 查詢報表作業 API ViewSets (DP060, DP065, DP070, DP095)
+# ============================================================================
+
+from django.db import connection
+
+class Dp060ViewSet(viewsets.ViewSet):
+    """大底量產統計查詢 ViewSet"""
+    program_id = 'w_dp060'
+
+    @action(detail=False, methods=['get'])
+    def query(self, request):
+        bottomno = request.query_params.get('bottomno')
+        customer = request.query_params.get('customer')
+        factory = request.query_params.get('factory')
+        lastno = request.query_params.get('lastno')
+        styleno = request.query_params.get('styleno')
+        pono = request.query_params.get('pono')
+
+        # Compatibility with old parameter names from frontend
+        if not customer:
+            customer = request.query_params.get('shortname') or request.query_params.get('cust')
+        if not factory:
+            factory = request.query_params.get('factno') or request.query_params.get('fty')
+
+        # PB Window: w_dp060
+        # PB DataWindow: d_dp060_query
+        # Purpose: 大底量產統計查詢
+        # Note: This uses prototype/development seed data in PostgreSQL shoe_trading_erp.
+        sql = """
+            SELECT DISTINCT dp015.bottomno, dp010.lastno, sa031.styleno, ba010.shortname, 
+                            ba015.shortname, sa030.pono, dp004.gender, SUM(sa032.pairs) as totalpairs, 
+                            sa032.sizerun, sa030.ba010gkey, sa030.ba015gkey, dp015.photopath
+            FROM dp015 
+            LEFT JOIN sa031 ON sa031.dp015gkey = dp015.gkey 
+            LEFT JOIN dp010 ON dp010.gkey = sa031.dp010gkey
+            LEFT JOIN sa030 ON sa030.gkey = sa031.sa030gkey
+            LEFT JOIN sa032 ON sa031.gkey = sa032.sa031gkey 
+            LEFT JOIN ba010 ON ba010.gkey = sa030.ba010gkey
+            LEFT JOIN ba015 ON ba015.gkey = sa030.ba015gkey
+            LEFT JOIN dp004 ON dp004.gkey = sa031.dp004gkey
+            WHERE sa032.status NOT IN ('0','6','A')
+        """
+
+        params = []
+        if bottomno:
+            sql += " AND dp015.bottomno ILIKE %s"
+            params.append(f"%{bottomno}%")
+        if customer:
+            sql += " AND ba010.shortname ILIKE %s"
+            params.append(f"%{customer}%")
+        if factory:
+            sql += " AND ba015.shortname ILIKE %s"
+            params.append(f"%{factory}%")
+        if lastno:
+            sql += " AND dp010.lastno ILIKE %s"
+            params.append(f"%{lastno}%")
+        if styleno:
+            sql += " AND sa031.styleno ILIKE %s"
+            params.append(f"%{styleno}%")
+        if pono:
+            sql += " AND sa030.pono ILIKE %s"
+            params.append(f"%{pono}%")
+
+        sql += """
+            GROUP BY dp015.bottomno, dp010.lastno, sa031.styleno, ba010.shortname, 
+                     ba015.shortname, sa030.pono, dp004.gender, sa032.sizerun, 
+                     sa030.ba010gkey, sa030.ba015gkey, dp015.photopath
+            ORDER BY dp015.bottomno
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            results.append({
+                'bottomno': r[0] or '',
+                'lastno': r[1] or '',
+                'styleno': r[2] or '',
+                'customer_shortname': r[3] or '',
+                'factory_shortname': r[4] or '',
+                'pono': r[5] or '',
+                'gender': r[6] or '',
+                'totalpairs': float(r[7]) if r[7] is not None else 0.0,
+                'sizerun': r[8] or '',
+                'ba010gkey': r[9] or '',
+                'ba015gkey': r[10] or '',
+                'photopath': r[11] or '',
+            })
+        return Response(results)
+
+
+class Dp065ViewSet(viewsets.ViewSet):
+    """型體量產統計查詢 ViewSet"""
+    program_id = 'w_dp065'
+
+    @action(detail=False, methods=['get'])
+    def query(self, request):
+        styleno = request.query_params.get('styleno')
+        customer = request.query_params.get('customer')
+        factory = request.query_params.get('factory')
+        group = request.query_params.get('group')
+        brand = request.query_params.get('brand')
+        maker = request.query_params.get('maker')
+
+        # Compatibility with old parameter names from frontend
+        if not customer:
+            customer = request.query_params.get('cust')
+        if not factory:
+            factory = request.query_params.get('fty')
+
+        # PB Window: w_dp065
+        # PB DataWindow: d_dp065_query
+        # Purpose: 型體量產統計查詢
+        # Note: stylename and stock are queried from the earliest created dp030 sample sheet for the styleno.
+        # This uses prototype/development seed data in PostgreSQL shoe_trading_erp.
+        sql = """
+            SELECT DISTINCT dp031.styleno, 
+                   (SELECT a.stylename FROM dp030 a WHERE a.gkey = 
+                      (SELECT e.gkey FROM dp030 e LEFT JOIN dp031 f ON f.dp030gkey = e.gkey
+                       WHERE f.styleno = dp031.styleno ORDER BY e.issuedate ASC, e.gkey ASC LIMIT 1)) as stylename, 
+                   (SELECT a.stock FROM dp030 a WHERE a.gkey = 
+                      (SELECT e.gkey FROM dp030 e LEFT JOIN dp031 f ON f.dp030gkey = e.gkey
+                       WHERE f.styleno = dp031.styleno ORDER BY e.issuedate ASC, e.gkey ASC LIMIT 1)) as stock, 
+                   dp023.groupname as group_name, 
+                   ba010.shortname as customer_shortname, 
+                   ba015.shortname as factory_shortname, 
+                   sa030.pono, 
+                   SUM(sa031.pairs) as totalpairs, 
+                   sa031.photopath
+            FROM dp031
+            LEFT JOIN sa031 ON sa031.styleno = dp031.styleno
+            LEFT JOIN sa030 ON sa030.gkey = sa031.sa030gkey
+            LEFT JOIN dp030 ON dp030.gkey = dp031.dp030gkey
+            LEFT JOIN ba010 ON ba010.gkey = sa030.ba010gkey
+            LEFT JOIN ba015 ON ba015.gkey = sa030.ba015gkey
+            LEFT JOIN dp023 ON dp023.gkey = dp030.dp023gkey
+            LEFT JOIN ba009 ON ba009.gkey = dp030.ba009gkey
+            LEFT JOIN es101 ON es101.gkey = dp030.es101gkey
+            WHERE sa030.status NOT IN ('0', '6', 'A')
+        """
+
+        params = []
+        if styleno:
+            sql += " AND dp031.styleno ILIKE %s"
+            params.append(f"%{styleno}%")
+        if customer:
+            sql += " AND ba010.shortname ILIKE %s"
+            params.append(f"%{customer}%")
+        if factory:
+            sql += " AND ba015.shortname ILIKE %s"
+            params.append(f"%{factory}%")
+        if group:
+            sql += " AND dp023.groupname ILIKE %s"
+            params.append(f"%{group}%")
+        if brand:
+            sql += " AND (ba009.ebrand ILIKE %s OR ba009.cbrand ILIKE %s)"
+            params.extend([f"%{brand}%", f"%{brand}%"])
+        if maker:
+            sql += " AND (es101.englishname ILIKE %s OR es101.chinesename ILIKE %s)"
+            params.extend([f"%{maker}%", f"%{maker}%"])
+
+        sql += """
+            GROUP BY dp031.styleno, dp023.groupname, ba010.shortname, ba015.shortname, sa030.pono, sa031.photopath
+            ORDER BY dp031.styleno
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            results.append({
+                'styleno': r[0] or '',
+                'stylename': r[1] or '',
+                'stock': r[2] or '',
+                'group_name': r[3] or '',
+                'customer_shortname': r[4] or '',
+                'factory_shortname': r[5] or '',
+                'pono': r[6] or '',
+                'totalpairs': float(r[7]) if r[7] is not None else 0.0,
+                'photopath': r[8] or '',
+            })
+        return Response(results)
+
+
+class Dp070ViewSet(viewsets.ViewSet):
+    """樣品數量統計查詢 ViewSet"""
+    program_id = 'w_dp070'
+
+    @action(detail=False, methods=['get'])
+    def query(self, request):
+        sampletype = request.query_params.get('sampletype')
+        customer = request.query_params.get('customer')
+        factory = request.query_params.get('factory')
+        brand = request.query_params.get('brand')
+        group = request.query_params.get('group')
+        maker = request.query_params.get('maker')
+        sampleno = request.query_params.get('sampleno')
+        styleno = request.query_params.get('styleno')
+
+        # Compatibility with old parameter names from frontend
+        if not customer:
+            customer = request.query_params.get('cust')
+        if not factory:
+            factory = request.query_params.get('fty')
+
+        # PB Window: w_dp070
+        # PB DataWindow: d_dp070_query
+        # Purpose: 樣品數量統計查詢
+        sql = """
+            SELECT DISTINCT dp002.sampletype,
+                            ba010.shortname as customer_shortname,
+                            ba015.shortname as factory_shortname,
+                            ba009.ebrand as brand,
+                            dp030.sampleno,
+                            dp031.styleno,
+                            dp030.stylename,
+                            dp030.stock,
+                            dp031.color,
+                            COALESCE((SELECT SUM(COALESCE(dp033.custpairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as custpairs,
+                            COALESCE((SELECT SUM(COALESCE(dp033.keeppairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as keeppairs,
+                            COALESCE((SELECT SUM(COALESCE(dp033.sentpairs, 0)) FROM dp033 WHERE dp033.dp031gkey = dp031.gkey), 0) as sentpairs,
+                            dp031.photopath
+            FROM dp031
+            LEFT JOIN dp030 ON dp030.gkey = dp031.dp030gkey
+            LEFT JOIN dp002 ON dp002.gkey = dp030.dp002gkey
+            LEFT JOIN ba010 ON ba010.gkey = dp030.ba010gkey
+            LEFT JOIN ba015 ON ba015.gkey = dp030.ba015gkey
+            LEFT JOIN ba009 ON ba009.gkey = dp030.ba009gkey
+            LEFT JOIN dp023 ON dp023.gkey = dp030.dp023gkey
+            LEFT JOIN es101 ON es101.gkey = dp030.es101gkey
+            WHERE 1=1
+        """
+
+        params = []
+        if sampletype:
+            sql += " AND dp002.sampletype ILIKE %s"
+            params.append(f"%{sampletype}%")
+        if customer:
+            sql += " AND ba010.shortname ILIKE %s"
+            params.append(f"%{customer}%")
+        if factory:
+            sql += " AND ba015.shortname ILIKE %s"
+            params.append(f"%{factory}%")
+        if brand:
+            sql += " AND (ba009.ebrand ILIKE %s OR ba009.cbrand ILIKE %s)"
+            params.extend([f"%{brand}%", f"%{brand}%"])
+        if group:
+            sql += " AND dp023.groupname ILIKE %s"
+            params.append(f"%{group}%")
+        if maker:
+            sql += " AND (es101.englishname ILIKE %s OR es101.chinesename ILIKE %s)"
+            params.extend([f"%{maker}%", f"%{maker}%"])
+        if sampleno:
+            sql += " AND dp030.sampleno ILIKE %s"
+            params.append(f"%{sampleno}%")
+        if styleno:
+            sql += " AND dp031.styleno ILIKE %s"
+            params.append(f"%{styleno}%")
+
+        sql += " ORDER BY dp030.sampleno, dp031.styleno"
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            cust = float(r[9]) if r[9] is not None else 0.0
+            keep = float(r[10]) if r[10] is not None else 0.0
+            total = cust + keep
+            results.append({
+                'sampletype': r[0] or '',
+                'customer_shortname': r[1] or '',
+                'factory_shortname': r[2] or '',
+                'brand': r[3] or '',
+                'sampleno': r[4] or '',
+                'styleno': r[5] or '',
+                'stylename': r[6] or '',
+                'stock': r[7] or '',
+                'color': r[8] or '',
+                'custpairs': cust,
+                'keeppairs': keep,
+                'totalpairs': total,
+                'sentpairs': float(r[11]) if r[11] is not None else 0.0,
+                'photopath': r[12] or '',
+            })
+        return Response(results)
+
+
+class Dp095ViewSet(viewsets.ViewSet):
+    """Confirmation Sample Control ViewSet"""
+    program_id = 'w_dp095'
+
+    @action(detail=False, methods=['get'])
+    def default_sample_type(self, request):
+        """Looks up the legacy sys_parameter value for 'sampletypeno' and finds matching dp002 sample type."""
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("SELECT parametervalue FROM sys_parameter WHERE LOWER(parameterid) = 'sampletypeno'")
+                row = cursor.fetchone()
+                if row:
+                    val = row[0]
+                    from api.models import Dp002
+                    # Try lookup by gkey first, then sampletype
+                    dp002 = Dp002.objects.filter(gkey=val).first() or Dp002.objects.filter(sampletype=val).first()
+                    if dp002:
+                        return Response({'gkey': dp002.gkey, 'sampletype': dp002.sampletype})
+            except Exception:
+                pass
+        return Response({'gkey': None, 'sampletype': None})
+
+    @action(detail=False, methods=['get'])
+    def query(self, request):
+        sampletype = request.query_params.get('sampletype')
+        customer = request.query_params.get('customer')
+        factory = request.query_params.get('factory')
+        styleno = request.query_params.get('styleno')
+        sampleno = request.query_params.get('sampleno')
+        approve_status = request.query_params.get('approve_status')  # all, approved, unapproved
+
+        # Compatibility with old parameter names from frontend
+        if not customer:
+            customer = request.query_params.get('cust')
+        if not factory:
+            factory = request.query_params.get('fty')
+
+        # PB Window: w_dp095
+        # PB DataWindow: d_dp095_query
+        # Purpose: Confirmation Sample Control (確認樣核對管控)
+        sql = """
+            SELECT DISTINCT dp030.sampleno,
+                            dp031.styleno,
+                            dp031.color,
+                            ba010.shortname as customer_shortname,
+                            ba015.shortname as factory_shortname,
+                            dp031.status,
+                            dp033.approvedate,
+                            COALESCE(dp033.custpairs, 0) as custpairs,
+                            COALESCE(dp033.keeppairs, 0) as keeppairs,
+                            COALESCE(dp033.sentpairs, 0) as sentpairs,
+                            dp031.photopath
+            FROM dp033
+            LEFT JOIN dp031 ON dp031.gkey = dp033.dp031gkey
+            LEFT JOIN dp030 ON dp030.gkey = dp031.dp030gkey
+            LEFT JOIN dp002 ON dp002.gkey = dp030.dp002gkey
+            LEFT JOIN ba010 ON ba010.gkey = dp030.ba010gkey
+            LEFT JOIN ba015 ON ba015.gkey = dp030.ba015gkey
+            WHERE 1=1
+        """
+
+        params = []
+        if sampletype:
+            sql += " AND dp002.sampletype ILIKE %s"
+            params.append(f"%{sampletype}%")
+        if customer:
+            sql += " AND ba010.shortname ILIKE %s"
+            params.append(f"%{customer}%")
+        if factory:
+            sql += " AND ba015.shortname ILIKE %s"
+            params.append(f"%{factory}%")
+        if styleno:
+            sql += " AND dp031.styleno ILIKE %s"
+            params.append(f"%{styleno}%")
+        if sampleno:
+            sql += " AND dp030.sampleno ILIKE %s"
+            params.append(f"%{sampleno}%")
+
+        # approve_status filtering:
+        # approved: dp033.approvedate IS NOT NULL
+        # unapproved: dp033.approvedate IS NULL
+        if approve_status == 'approved':
+            sql += " AND dp033.approvedate IS NOT NULL"
+        elif approve_status == 'unapproved':
+            sql += " AND dp033.approvedate IS NULL"
+
+        # status_list multi-select handling
+        status_list_raw = request.query_params.getlist('status_list')
+        if not status_list_raw:
+            status_str = request.query_params.get('status_list')
+            if status_str:
+                status_list_raw = status_str.split(',')
+
+        valid_statuses = ['0', '1', '2', '3']
+        status_filter = [s for s in status_list_raw if s in valid_statuses]
+        if status_filter:
+            placeholders = ', '.join(['%s'] * len(status_filter))
+            sql += f" AND dp031.status IN ({placeholders})"
+            params.extend(status_filter)
+
+        sql += " ORDER BY dp030.sampleno, dp031.styleno"
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        results = []
+        for r in rows:
+            results.append({
+                'sampleno': r[0] or '',
+                'styleno': r[1] or '',
+                'color': r[2] or '',
+                'customer_shortname': r[3] or '',
+                'factory_shortname': r[4] or '',
+                'status': r[5] or '',
+                'approvedate': r[6].isoformat() if r[6] is not None else None,
+                'custpairs': float(r[7]) if r[7] is not None else 0.0,
+                'keeppairs': float(r[8]) if r[8] is not None else 0.0,
+                'sentpairs': float(r[9]) if r[9] is not None else 0.0,
+                'photopath': r[10] or '',
+            })
+        return Response(results)
+
+
+# ============================================================================
 # 🔐 ERP Web 登入與權限系統 API
 # ============================================================================
 
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from core.permissions import HasProgramPermission
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from api.models import SysAccountsActive, generate_pb_gkey
@@ -3272,7 +3996,7 @@ def _get_user_info_response(user):
     email = ""
     privilege_class = "1"
 
-    account = getattr(user, 'sys_account', None)
+    account = _get_sys_account(user)
     if account:
         privilege_class = account.peopdom_class
         from api.models import Es101
@@ -3306,7 +4030,7 @@ def auth_login(request):
     token, _ = Token.objects.get_or_create(user=user)
 
     # 寫入重複登入 active session
-    account = getattr(user, 'sys_account', None)
+    account = _get_sys_account(user)
     if account:
         # 單一 Session 強制機制：清空之前的連線
         SysAccountsActive.objects.filter(accounts_id=account.accounts_id).delete()

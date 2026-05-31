@@ -2,7 +2,10 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from decimal import Decimal
-from api.models import Dp030, Dp031, Dp033, Ba010, Ba015, Ba055, Dp002
+from api.models import Dp030, Dp031, Dp033, Ba010, Ba015, Ba055, Dp002, Mr035
+
+Mr035._meta.managed = True
+
 
 class Dp040ImportCandidatesTests(APITestCase):
 
@@ -581,6 +584,260 @@ class Dp050ApiTests(APITestCase):
         response = self.client.post(url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data.get('detail'), "找不到對應的尺碼資料，可能已被刪除，請重新查詢後再操作。")
+
+
+from api.models import Mr015, Mr016, Mr030, Mr035
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.storage import default_storage
+from django.db import connection
+
+def ensure_mr035_table():
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mr035 (
+                gkey VARCHAR(20) PRIMARY KEY,
+                mstkno VARCHAR(60) UNIQUE,
+                mname VARCHAR(100),
+                mr015gkey VARCHAR(20),
+                mr016gkey VARCHAR(20),
+                mr030gkey VARCHAR(20)
+            )
+        """)
+
+class Mr015ViewSetTests(APITestCase):
+    def setUp(self):
+        ensure_mr035_table()
+        self.mr015_url = reverse('mr015-list')
+        self.bulk_save_url = reverse('mr015-bulk-save')
+
+    def test_mr015_crud(self):
+        # Create
+        response = self.client.post(self.mr015_url, {'matno': 'M15', 'cname': '大類A', 'serialno': 1}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Mr015.objects.count(), 1)
+        gkey = response.data['gkey']
+
+        # Read
+        response = self.client.get(self.mr015_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Update
+        update_url = reverse('mr015-detail', kwargs={'pk': gkey})
+        response = self.client.patch(update_url, {'cname': '大類A_updated'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Mr015.objects.get(gkey=gkey).cname, '大類A_updated')
+
+        # Delete
+        response = self.client.delete(update_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Mr015.objects.count(), 0)
+
+    def test_mr015_duplicate_check(self):
+        # Create first
+        Mr015.objects.create(matno='M15_DUP', cname='First', serialno=1)
+        # Create second with same matno
+        response = self.client.post(self.mr015_url, {'matno': 'M15_DUP', 'cname': 'Second', 'serialno': 2}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已存在，不可重複", str(response.data))
+
+    def test_mr015_reference_check(self):
+        # Create Master
+        master = Mr015.objects.create(matno='M15_REF', cname='Ref Master', serialno=1)
+        # Create reference in Mr035
+        mr035 = Mr035.objects.create(mstkno='MAT_REF_1', mname='Ref Material', mr015gkey=master.gkey)
+
+        # Try to delete master
+        detail_url = reverse('mr015-detail', kwargs={'pk': master.gkey})
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+        # Try to update matno
+        response = self.client.patch(detail_url, {'matno': 'M15_REF_CHG'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+        # Try bulk save delete
+        response = self.client.post(self.bulk_save_url, {
+            'upsert': [],
+            'delete': [master.gkey]
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+        # Clean reference and delete should work
+        mr035.delete()
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+
+class Mr016ViewSetTests(APITestCase):
+    def setUp(self):
+        ensure_mr035_table()
+        self.master = Mr015.objects.create(matno='M15_DETAIL', cname='Master', serialno=1)
+        self.mr016_url = reverse('mr016-list')
+        self.bulk_save_url = reverse('mr016-bulk-save')
+
+    def test_mr016_crud_and_query_filter(self):
+        # Create
+        response = self.client.post(self.mr016_url, {
+            'mr015gkey': self.master.gkey,
+            'smatno': 'S16',
+            'cname': '小類A',
+            'serialno': 1
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Mr016.objects.count(), 1)
+        gkey = response.data['gkey']
+
+        # Query filter by mr015gkey
+        response = self.client.get(self.mr016_url, {'mr015gkey': self.master.gkey})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Query filter by other key (should return 0)
+        response = self.client.get(self.mr016_url, {'mr015gkey': 'nonexistent'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+        # Update
+        detail_url = reverse('mr016-detail', kwargs={'pk': gkey})
+        response = self.client.patch(detail_url, {'cname': '小類A_updated'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Mr016.objects.get(gkey=gkey).cname, '小類A_updated')
+
+        # Delete
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_mr016_duplicate_check(self):
+        # Same matno under same master is duplicate
+        Mr016.objects.create(mr015gkey=self.master, smatno='S16_DUP', cname='First', serialno=1)
+        response = self.client.post(self.mr016_url, {
+            'mr015gkey': self.master.gkey,
+            'smatno': 'S16_DUP',
+            'cname': 'Second',
+            'serialno': 2
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已存在，不可重複", str(response.data))
+
+    def test_mr016_scoped_serialno_different_masters(self):
+        # Different masters can have the same serialno for their details
+        master2 = Mr015.objects.create(matno='M15_2', cname='Master 2', serialno=2)
+        
+        # Detail 1 under master 1, serialno = 1
+        Mr016.objects.create(mr015gkey=self.master, smatno='S16_A', cname='Detail A', serialno=1)
+        
+        # Detail 2 under master 2, serialno = 1
+        response = self.client.post(self.mr016_url, {
+            'mr015gkey': master2.gkey,
+            'smatno': 'S16_B',
+            'cname': 'Detail B',
+            'serialno': 1
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Mr016.objects.get(gkey=response.data['gkey']).serialno, 1)
+
+    def test_mr016_reference_check(self):
+        detail = Mr016.objects.create(mr015gkey=self.master, smatno='S16_REF', cname='Ref Detail', serialno=1)
+        mr035 = Mr035.objects.create(mstkno='MAT_REF_2', mname='Ref Material', mr016gkey=detail.gkey)
+
+        detail_url = reverse('mr016-detail', kwargs={'pk': detail.gkey})
+        
+        # Try delete
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+        # Try update smatno
+        response = self.client.patch(detail_url, {'smatno': 'S16_REF_CHG'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+
+class Mr030ViewSetTests(APITestCase):
+    def setUp(self):
+        ensure_mr035_table()
+        self.mr030_url = reverse('mr030-list')
+        self.bulk_save_url = reverse('mr030-bulk-save')
+
+    def test_mr030_crud_and_duplicate(self):
+        # Create
+        response = self.client.post(self.mr030_url, {
+            'veinno': 'V30',
+            'cname': '紋路A',
+            'serialno': 1
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        gkey = response.data['gkey']
+
+        # Duplicate check
+        response = self.client.post(self.mr030_url, {
+            'veinno': 'V30',
+            'cname': '紋路B',
+            'serialno': 2
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Delete
+        detail_url = reverse('mr030-detail', kwargs={'pk': gkey})
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_mr030_reference_check(self):
+        vein = Mr030.objects.create(veinno='V30_REF', cname='Ref Vein', serialno=1)
+        mr035 = Mr035.objects.create(mstkno='MAT_REF_3', mname='Ref Material', mr030gkey=vein.gkey)
+
+        detail_url = reverse('mr030-detail', kwargs={'pk': vein.gkey})
+
+        # Try delete
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+        # Try update veinno
+        response = self.client.patch(detail_url, {'veinno': 'V30_REF_CHG'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("已被料號主檔引用", str(response.data))
+
+
+class ImageUploadTests(APITestCase):
+    def setUp(self):
+        self.upload_url = reverse('upload_image')
+        from django.contrib.auth.models import User
+        self.user = User.objects.create_user(username='testuploader', password='password')
+        self.client.force_authenticate(user=self.user)
+
+    def test_upload_success(self):
+        img_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        uploaded_file = SimpleUploadedFile("test.png", img_data, content_type="image/png")
+        
+        response = self.client.post(self.upload_url, {'image': uploaded_file}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('url', response.data)
+        self.assertIn('path', response.data)
+        self.assertIn('filename', response.data)
+
+        # Cleanup uploaded file
+        path = response.data['path']
+        if default_storage.exists(path):
+            default_storage.delete(path)
+
+    def test_upload_reject_non_image(self):
+        uploaded_file = SimpleUploadedFile("test.txt", b"plain text data", content_type="text/plain")
+        response = self.client.post(self.upload_url, {'image': uploaded_file}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("檔案類型必須是圖片", str(response.data.get('detail', '')))
+
+    def test_upload_reject_large_file(self):
+        large_data = b'0' * (5 * 1024 * 1024 + 100) # > 5MB
+        uploaded_file = SimpleUploadedFile("large.png", large_data, content_type="image/png")
+        response = self.client.post(self.upload_url, {'image': uploaded_file}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("圖片大小不能超過 5MB", str(response.data.get('detail', '')))
+
 
 
 

@@ -2069,10 +2069,31 @@ class SysAccountsActive(models.Model):
         db_table = 'sys_accounts_active'
 
 
+class SysPopedomGroup(models.Model):
+    hisystem = models.CharField(max_length=10, db_column='hisystem')
+    group_code = models.CharField(primary_key=True, max_length=20, db_column='group_code')
+    group_name = models.CharField(max_length=20, db_column='group_name')
+
+    class Meta:
+        managed = False
+        db_table = 'sys_popedom_group'
+        unique_together = (('hisystem', 'group_code'),)
 
 
+import sys
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
 
+class Mr035(models.Model):
+    """料號主檔 mr035 (唯讀/非託管，用於防呆引用檢查)"""
+    gkey = models.CharField(primary_key=True, max_length=20, default=generate_pb_gkey, db_column='gkey')
+    mstkno = models.CharField(max_length=60, unique=True, db_column='mstkno')
+    mname = models.CharField(max_length=100, null=True, blank=True, db_column='mname')
+    mr015gkey = models.CharField(max_length=20, null=True, blank=True, db_column='mr015gkey')
+    mr016gkey = models.CharField(max_length=20, null=True, blank=True, db_column='mr016gkey')
+    mr030gkey = models.CharField(max_length=20, null=True, blank=True, db_column='mr030gkey')
 
-
+    class Meta:
+        managed = TESTING
+        db_table = 'mr035'
 
 
