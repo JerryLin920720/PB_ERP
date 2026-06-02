@@ -1,6 +1,8 @@
 import React from 'react';
 import { Form, Spin, Button, Space, Table, message } from 'antd';
 import axios from 'axios';
+import useAuth from '../../../auth/useAuth';
+import { canExecuteCommand } from '../../../auth/permissionUtils';
 import ERPSheetPage from '../shell/ERPSheetPage';
 import ERPQueryListLayout from '../layout/ERPQueryListLayout';
 
@@ -41,6 +43,7 @@ export default function createQueryListSheet(config) {
     afterRetrieve,
     initialContext,
     mainClassName,
+    renderTopRightPreview,
   } = config;
 
   const rowKey = list.rowKey || 'gkey';
@@ -49,6 +52,7 @@ export default function createQueryListSheet(config) {
     layout.queryResultHeight !== undefined ? layout.queryResultHeight : 360;
 
   return function QueryListSheet() {
+    const { user, permissions } = useAuth();
     const [searchForm] = Form.useForm();
     const [rows, setRows] = React.useState([]);
     const [loading, setLoading] = React.useState(false);
@@ -159,6 +163,12 @@ export default function createQueryListSheet(config) {
         const { targetSheet, action } = event.detail || {};
         if (targetSheet !== sheetId) return;
 
+        // 二次權限防呆
+        if (!canExecuteCommand(permissions, sheetId, action, user)) {
+          message.error(`您無權在此作業執行 [${action}] 操作！`);
+          return;
+        }
+
         if (action === 'retrieve') {
           retrieve();
           return;
@@ -183,7 +193,9 @@ export default function createQueryListSheet(config) {
       return () => window.removeEventListener('mdi-global-command', handleGlobalCommand);
     }, [sheetId, retrieve, handleSave, handleClear]);
 
-    const queryPanel = (
+    const hasRightPreview = typeof renderTopRightPreview === 'function';
+
+    const queryFormElement = (
       <Form
         form={searchForm}
         layout="vertical"
@@ -215,6 +227,19 @@ export default function createQueryListSheet(config) {
           </Space>
         </div>
       </Form>
+    );
+
+    const queryPanel = hasRightPreview ? (
+      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {queryFormElement}
+        </div>
+        <div style={{ flex: '0 0 240px', width: 240, minHeight: '120px' }}>
+          {renderTopRightPreview({ form: searchForm, context, setContext, rows, loading })}
+        </div>
+      </div>
+    ) : (
+      queryFormElement
     );
 
     const defaultResult = (

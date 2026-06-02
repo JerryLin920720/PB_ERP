@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { Folder, FolderOpen, FileText, ChevronRight, ChevronDown, Star, Trash2 } from 'lucide-react';
 import { Dropdown, message } from 'antd';
 import { useAuth } from '../auth/useAuth';
+import { isAdmin } from '../auth/permissionUtils';
 import './Sidebar.css';
 
 // 系統設置管理系統
-const ssNodes = [];
+const ssNodes = [
+  { code: 'ss001', label: '選單與權限啟用設定', permissionKey: 'w_ss001' },
+  { code: 'sy005', label: '使用者與群組權限管理', permissionKey: 'w_sy005' }
+];
 
 // 基本資料 26 隻作業序列
 const baNodes = [
@@ -94,31 +98,31 @@ const mmNodes = [
 ];
 
 const saNodes = [
-  { code: 'sa001', label: '訂單片語字庫' },
-  { code: 'sa005', label: '訂單預算管理' },
-  { code: 'sa006', label: '顏色設定' },
-  { code: 'sa007', label: '配件設定' },
-  { code: 'sa010', label: '客戶資料管理' },
-  { code: 'sa015', label: '訂單資料管理' },
-  { code: 'sa018', label: '未結訂單餘額查詢' },
-  { code: 'sa020', label: '付款方式設定' },
-  { code: 'sa030', label: '配額資料管理' },
-  { code: 'sa040', label: '訂單報價管理' },
-  { code: 'sa045', label: '訂單審核管理' },
-  { code: 'sa046', label: '新鞋訂單樣品審核' },
-  { code: 'sa048', label: '客戶配額查詢' },
-  { code: 'sa050', label: '年度訂單結算' },
-  { code: 'sa055', label: '訂單數量綜合統計' },
-  { code: 'sa058', label: '樣品訂單統計' },
-  { code: 'sa060', label: '出貨單狀態審核' },
-  { code: 'sa065', label: '出貨單資料管理' },
-  { code: 'sa070', label: '訂單餘額明細查詢' },
-  { code: 'sa075', label: '訂單轉入 DP041 管理' },
-  { code: 'sa080', label: '訂單餘額統計' },
-  { code: 'sa085', label: '樣品成本核算' },
-  { code: 'sa090', label: '樣品數量綜合統計' },
-  { code: 'sa095', label: '出貨單統計' },
-  { code: 'sa096', label: '訂單樣品狀態綜合查詢' },
+  { code: 'sa001', label: '業務片語字庫' },
+  { code: 'sa005', label: 'Assortment 設定' },
+  { code: 'sa006', label: '其他費用設定' },
+  { code: 'sa007', label: '報價其他費用設定' },
+  { code: 'sa010', label: '報價資料管理' },
+  { code: 'sa015', label: '開模通知單' },
+  { code: 'sa018', label: '外部訂單匯入作業' },
+  { code: 'sa020', label: '預告訂單資料管理' },
+  { code: 'sa030', label: '正式訂單資料管理' },
+  { code: 'sa040', label: 'PI 訂單資料管理' },
+  { code: 'sa045', label: '訂單狀態審核管理' },
+  { code: 'sa046', label: '配件收受資料管理' },
+  { code: 'sa048', label: '預接訂單查詢' },
+  { code: 'sa050', label: '退貨訂單查詢' },
+  { code: 'sa055', label: '客戶訂單查詢' },
+  { code: 'sa058', label: '未出貨完成訂單查詢' },
+  { code: 'sa060', label: '工廠訂單查詢' },
+  { code: 'sa065', label: '利潤預估查詢' },
+  { code: 'sa070', label: '型體接單統計查詢' },
+  { code: 'sa075', label: '客戶接單統計查詢' },
+  { code: 'sa080', label: '工廠接單統計查詢' },
+  { code: 'sa085', label: '客戶索樣與接單統計分析' },
+  { code: 'sa090', label: '暢銷型體查詢' },
+  { code: 'sa095', label: '信件內容整合管理' },
+  { code: 'sa096', label: '未收到 LC 查詢' },
 ];
 
 const qcNodes = []; 
@@ -192,14 +196,27 @@ export default function Sidebar({ onSelectNode, activeNode }) {
     setExpandedNodes(prev => ({ ...prev, [node]: !prev[node] }));
   };
 
-  // 1. 取得全域 Auth 中的 menuData
-  const { menuData } = useAuth();
+  // 1. 取得全域 Auth 中的 menuData, isLoading, user
+  const { menuData, isLoading, user } = useAuth();
+
+  // Temporary debug logs
+  console.log('[Sidebar Debug] user:', user);
+  console.log('[Sidebar Debug] isAdmin(user):', isAdmin(user));
+  console.log('[Sidebar Debug] menuData:', menuData);
+  console.log('[Sidebar Debug] menuData.length:', Array.isArray(menuData) ? menuData.length : 'not an array');
+
+  if (menuData && typeof menuData === 'object' && !Array.isArray(menuData)) {
+    console.warn('[Sidebar Warning] menuData is an object but not an array! Value:', menuData);
+  }
 
   // 2. 當 menuData 有效且不為空時，對靜態選單進行動態過濾與重組
   const effectiveMenuData = React.useMemo(() => {
     if (!Array.isArray(menuData) || menuData.length === 0) {
-      // Phase 5 fallback: if backend menuData is empty, keep legacy static menu for compatibility.
-      return systemModules;
+      const enableFallback = import.meta.env.VITE_ENABLE_STATIC_MENU_FALLBACK === 'true';
+      if (enableFallback) {
+        return systemModules;
+      }
+      return [];
     }
 
     // Direct mapping from backend menuData to conform to the phase requirements
@@ -242,6 +259,16 @@ export default function Sidebar({ onSelectNode, activeNode }) {
     });
   }, [menuData]);
 
+  React.useEffect(() => {
+    console.log('[Sidebar Debug] Received effectiveMenuData:', effectiveMenuData);
+    effectiveMenuData.forEach(folder => {
+      console.log(`[Sidebar Debug] Folder: ${folder.label}`);
+      folder.nodes.forEach(node => {
+        console.log(`  [Sidebar Debug] Node - prg_code: ${node.programCode}, obj_name: ${node.permissionKey}, label: ${node.label}, tabId: ${node.code}`);
+      });
+    });
+  }, [effectiveMenuData]);
+
   // 3. 過濾「我的最愛」以確保只顯示有權限之作業
   const filteredFavorites = React.useMemo(() => {
     if (!Array.isArray(menuData) || menuData.length === 0) {
@@ -280,7 +307,19 @@ export default function Sidebar({ onSelectNode, activeNode }) {
       >
         <div
           className={`tree-node leaf ${isSelected ? 'selected-node' : ''}`}
-          onClick={() => onSelectNode && onSelectNode(item.code, item.label, { permissionKey: item.permissionKey })}
+          onClick={() => {
+            console.log('[Sidebar Debug] Node clicked:', {
+              prg_code: item.programCode || item.code,
+              obj_name: item.permissionKey,
+              label: item.label,
+              tabId: item.code
+            });
+            console.log("[SY005 DEBUG] sidebar click node:", item);
+            console.log("[SY005 DEBUG] open tab id:", item.code);
+            if (onSelectNode) {
+              onSelectNode(item.code, item.label, { permissionKey: item.permissionKey });
+            }
+          }}
           title={`${item.code} - ${item.label}`}
         >
           <span className="leaf-icon"><FileText size={12} color={iconColor} /></span>
@@ -300,6 +339,16 @@ export default function Sidebar({ onSelectNode, activeNode }) {
       <span className="node-text">尚未配置核心作業...</span>
     </div>
   );
+
+  if (isLoading) {
+    return (
+      <aside className="classic-sidebar">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', fontSize: '12px', opacity: 0.7 }}>
+          選單載入中...
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="classic-sidebar">
@@ -367,50 +416,56 @@ export default function Sidebar({ onSelectNode, activeNode }) {
 
         {expandedNodes.root && (
           <div className="tree-children">
-            {effectiveMenuData.map(mod => {
-              const isExpanded = !!expandedNodes[mod.id];
+            {effectiveMenuData.length === 0 ? (
+              <div className="tree-node leaf" style={{ opacity: 0.7, fontStyle: 'italic', pointerEvents: 'none', paddingLeft: '20px', color: 'var(--text-muted)' }}>
+                目前沒有可用作業，請確認權限設定
+              </div>
+            ) : (
+              effectiveMenuData.map(mod => {
+                const isExpanded = !!expandedNodes[mod.id];
 
-              return (
-                <div key={mod.id}>
-                  <div className="tree-node sub-root" onClick={() => toggleNode(mod.id)}>
-                    <span className="tree-collapse-btn">
-                      {isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
-                    </span>
-                    <span className="node-icon">
-                      {isExpanded
-                        ? <FolderOpen size={14} color={mod.color} fill={mod.fill}/>
-                        : <Folder size={14} color={mod.color} fill={mod.fill}/>
-                      }
-                    </span>
-                    <span className="node-text">{mod.label}</span>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="tree-children">
-                      {mod.mapNode && (
-                        <div
-                          className={`tree-node leaf ${activeNode === mod.mapNode.code ? 'selected-node' : ''}`}
-                          onClick={() => onSelectNode && onSelectNode(mod.mapNode.code, mod.mapNode.label)}
-                          title={mod.mapNode.label}
-                        >
-                          <span className="leaf-icon">
-                            <FolderOpen size={12} color={activeNode === mod.mapNode.code ? 'var(--primary-color)' : mod.color} />
-                          </span>
-                          <span className="node-text" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
-                            📍 {mod.mapNode.label}
-                          </span>
-                        </div>
-                      )}
-
-                      {mod.nodes.length > 0
-                        ? mod.nodes.map(item => renderModuleNode(item, mod))
-                        : renderEmptyModule()
-                      }
+                return (
+                  <div key={mod.id}>
+                    <div className="tree-node sub-root" onClick={() => toggleNode(mod.id)}>
+                      <span className="tree-collapse-btn">
+                        {isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
+                      </span>
+                      <span className="node-icon">
+                        {isExpanded
+                          ? <FolderOpen size={14} color={mod.color} fill={mod.fill}/>
+                          : <Folder size={14} color={mod.color} fill={mod.fill}/>
+                        }
+                      </span>
+                      <span className="node-text">{mod.label}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {isExpanded && (
+                      <div className="tree-children">
+                        {mod.mapNode && (
+                          <div
+                            className={`tree-node leaf ${activeNode === mod.mapNode.code ? 'selected-node' : ''}`}
+                            onClick={() => onSelectNode && onSelectNode(mod.mapNode.code, mod.mapNode.label)}
+                            title={mod.mapNode.label}
+                          >
+                            <span className="leaf-icon">
+                              <FolderOpen size={12} color={activeNode === mod.mapNode.code ? 'var(--primary-color)' : mod.color} />
+                            </span>
+                            <span className="node-text" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
+                              📍 {mod.mapNode.label}
+                            </span>
+                          </div>
+                        )}
+
+                        {mod.nodes.length > 0
+                          ? mod.nodes.map(item => renderModuleNode(item, mod))
+                          : renderEmptyModule()
+                        }
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </div>

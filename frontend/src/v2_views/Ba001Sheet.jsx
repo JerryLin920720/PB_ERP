@@ -14,10 +14,12 @@ export default createDataWindowSheet({
   breadcrumb: ['基本資料管理', '個人片語'],
   apiUrl: 'http://localhost:8001/api/ba001/',
   sequenceField: 'serialno',
+  sequenceScopeField: 'f2type',
   autoRenumber: true,
   columns: [
     { key: 'serialno', label: '流水號', width: '100px', editable: false, type: 'number' },
     { key: 'description', label: '片語說明', width: '420px', editable: true, type: 'string' },
-    { key: 'f2type', label: '類別代號', width: '120px', editable: true, type: 'string' }
+    { key: 'f2type', label: '類別代號', width: '120px', editable: false, type: 'string', initialValue: 'BA' }
+   
   ]
 });

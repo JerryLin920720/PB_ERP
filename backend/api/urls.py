@@ -37,6 +37,9 @@ router.register(r'ba085', views.Ba085ViewSet, basename='ba085')
 router.register(r'mr035', views.Mr035ViewSet, basename='mr035')
 router.register(r'mr010', views.Mr010ViewSet, basename='mr010')
 router.register(r'sys_accounts', views.SysAccountViewSet, basename='sys_accounts')
+router.register(r'sys-menu', views.SysMenuViewSet, basename='sys-menu')
+router.register(r'sys-popedom-desc', views.SysPopedomDescViewSet, basename='sys-popedom-desc')
+router.register(r'sys-menu-column', views.SysMenuColumnViewSet, basename='sys-menu-column')
 router.register(r'es101', views.Es101ViewSet, basename='es101')
 router.register(r'es102', views.Es102ViewSet, basename='es102')
 router.register(r'es103', views.Es103ViewSet, basename='es103')
@@ -85,10 +88,11 @@ router.register(r'dp081', views.Dp081ViewSet, basename='dp081')
 router.register(r'dp082', views.Dp082ViewSet, basename='dp082')
 router.register(r'dp100', views.Dp100ViewSet, basename='dp100')
 router.register(r'dp101', views.Dp101ViewSet, basename='dp101')
-
+router.register(r'dp055', views.Dp055ViewSet, basename='dp055')  # DP055 樣品成本核算
 router.register(r'dp060', views.Dp060ViewSet, basename='dp060')
 router.register(r'dp065', views.Dp065ViewSet, basename='dp065')
 router.register(r'dp070', views.Dp070ViewSet, basename='dp070')
+
 router.register(r'dp095', views.Dp095ViewSet, basename='dp095')
 
 router.register(r'mr001', views.Mr001ViewSet, basename='mr001')
@@ -100,6 +104,11 @@ router.register(r'mr025', views.Mr025ViewSet, basename='mr025')
 router.register(r'mr030', views.Mr030ViewSet, basename='mr030')
 router.register(r'mr031', views.Mr031ViewSet, basename='mr031')
 
+# 💼 業務部門管理系統 (Sales Administration - SA) - Pattern A
+router.register(r'sa001', views.Sa001ViewSet, basename='sa001')
+router.register(r'sa005', views.Sa005ViewSet, basename='sa005')
+router.register(r'sa006', views.Sa006ViewSet, basename='sa006')
+router.register(r'sa007', views.Sa007ViewSet, basename='sa007')
 
 
 urlpatterns = [
@@ -115,5 +124,18 @@ urlpatterns = [
     path('auth/me/', views.auth_me, name='auth_me'),
     path('auth/permissions/', views.auth_permissions, name='auth_permissions'),
     path('auth/menu/', views.auth_menu, name='auth_menu'),
+    
+    # 🔑 User & Group Permission matrix workbench endpoints
+    path('auth/users/', views.auth_users, name='auth_users'),
+    path('auth/users/<str:accounts_id>/', views.auth_user_detail, name='auth_user_detail'),
+    path('auth/users/<str:accounts_id>/disable/', views.auth_user_disable, name='auth_user_disable'),
+    path('auth/users/<str:accounts_id>/enable/', views.auth_user_enable, name='auth_user_enable'),
+    path('auth/groups/', views.auth_groups, name='auth_groups'),
+    path('auth/groups/<str:group_code>/', views.auth_group_detail, name='auth_group_detail'),
+    path('auth/user-groups/', views.auth_user_groups, name='auth_user_groups'),
+    path('auth/permission-matrix/', views.auth_permission_matrix, name='auth_permission_matrix'),
+    path('auth/save-permissions/', views.auth_save_permissions, name='auth_save_permissions'),
+    path('auth/copy-permissions/', views.auth_copy_permissions, name='auth_copy_permissions'),
+    path('auth/apply-group-permissions/', views.auth_apply_group_permissions, name='auth_apply_group_permissions'),
 ]
 

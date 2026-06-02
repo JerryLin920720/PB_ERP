@@ -3,7 +3,7 @@ from .models import (
     Ab230, Ab231,
     Ba001, Ba002, Ba003, Ba004, Ba005, Ba009, Ba010, Ba011, Ba012, Ba013, Ba014, Ba015, Ba016, Ba020, Ba040,
     Ba045, Ba050, Ba055, Ba060, Ba061, Ba065, Ba070, Ba075, Ba076,
-    Ba080, Ba085, Ba090, Ba091, Ba092, SysAccount, Es101, Es102, Es103, Es104,
+    Ba080, Ba085, Ba090, Ba091, Ba092, SysAccount, SysMenu, SysPopedomDesc, SysMenuColumn, Es101, Es102, Es103, Es104,
     Dp001, Dp002, Dp003, Dp004, Dp004A, Dp005, Dp006, Dp008, Dp009, Dp007,
     Dp010, Dp015, Dp020,
     Dp016, Dp017, Dp018,
@@ -11,7 +11,8 @@ from .models import (
     Dp025, Dp026, Dp027, Dp028,
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
     Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
-    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031
+    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031,
+    Sa006, Sa007, Sa005, SysPopedomGroup, SysAccountsGroup
 )
 
 
@@ -240,10 +241,108 @@ class Ba085Serializer(serializers.ModelSerializer):
 
 
 class SysAccountSerializer(serializers.ModelSerializer):
+    es101_employeeno = serializers.SerializerMethodField()
+    es101_chinesename = serializers.SerializerMethodField()
+
     class Meta:
         model = SysAccount
-        fields = '__all__'
-        extra_kwargs = {'gkey': {'required': False}}
+        fields = ['accounts_id', 'accounts', 'user_pwd', 'user_id', 'peopdom_class', 'status_sign', 'hisystem', 'create_date', 'gkey', 'es101_employeeno', 'es101_chinesename']
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'user_pwd': {'write_only': True}
+        }
+
+    def get_es101_employeeno(self, obj):
+        if obj.user_id:
+            emp = Es101.objects.filter(gkey=obj.user_id).first()
+            if emp:
+                return emp.employeeno
+        return ""
+
+    def get_es101_chinesename(self, obj):
+        if obj.user_id:
+            emp = Es101.objects.filter(gkey=obj.user_id).first()
+            if emp:
+                return emp.chinesename
+        return ""
+
+
+import uuid
+from django.contrib.auth.hashers import make_password
+
+class SysAccountCreateSerializer(serializers.ModelSerializer):
+    es101_employeeno = serializers.CharField(write_only=True, required=True)
+    user_pwd = serializers.CharField(write_only=True, required=True)
+
+    class Meta:
+        model = SysAccount
+        fields = ['accounts', 'user_pwd', 'es101_employeeno', 'peopdom_class', 'status_sign', 'hisystem']
+
+    def validate_accounts(self, value):
+        if SysAccount.objects.filter(accounts=value).exists():
+            raise serializers.ValidationError("帳號已存在。")
+        return value
+
+    def validate_es101_employeeno(self, value):
+        emp = Es101.objects.filter(employeeno=value).first()
+        if not emp:
+            raise serializers.ValidationError("員工編號不存在於員工主檔 (es101) 中。")
+        return value
+
+    def create(self, validated_data):
+        employeeno = validated_data.pop('es101_employeeno')
+        emp = Es101.objects.get(employeeno=employeeno)
+        
+        raw_pwd = validated_data.pop('user_pwd')
+        hashed_pwd = make_password(raw_pwd)
+        
+        accounts_id = str(uuid.uuid4())
+        
+        account = SysAccount.objects.create(
+            accounts_id=accounts_id,
+            user_id=emp.gkey,
+            user_pwd=hashed_pwd,
+            **validated_data
+        )
+        return account
+
+
+class SysAccountUpdateSerializer(serializers.ModelSerializer):
+    es101_employeeno = serializers.CharField(write_only=True, required=False)
+    user_pwd = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = SysAccount
+        fields = ['accounts', 'user_pwd', 'es101_employeeno', 'peopdom_class', 'status_sign']
+
+    def validate_accounts(self, value):
+        instance = self.instance
+        if SysAccount.objects.filter(accounts=value).exclude(accounts_id=instance.accounts_id).exists():
+            raise serializers.ValidationError("帳號已存在。")
+        return value
+
+    def validate_es101_employeeno(self, value):
+        emp = Es101.objects.filter(employeeno=value).first()
+        if not emp:
+            raise serializers.ValidationError("員工編號不存在於員工主檔 (es101) 中。")
+        return value
+
+    def update(self, instance, validated_data):
+        employeeno = validated_data.pop('es101_employeeno', None)
+        if employeeno:
+            emp = Es101.objects.get(employeeno=employeeno)
+            instance.user_id = emp.gkey
+            
+        raw_pwd = validated_data.pop('user_pwd', None)
+        if raw_pwd and raw_pwd.strip() != "":
+            instance.user_pwd = make_password(raw_pwd)
+            
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+            
+        instance.save()
+        return instance
+
 
 
 class Es101Serializer(serializers.ModelSerializer):
@@ -948,5 +1047,236 @@ class Mr030Serializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError(f"紋路代號 '{value}' 已存在，不可重複。")
         return value
+
+
+# ============================================================================
+# 💼 業務部門管理系統 (Sales Administration - SA) Serializers
+# ============================================================================
+
+class Sa001Serializer(serializers.ModelSerializer):
+    """
+    業務片語字庫 (sa001) Serializer
+    重用 Ba001 model，以 f2type='SA' 區分業務部門片語。
+    """
+    class Meta:
+        model = Ba001
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'es101gkey': {'required': False},
+            'f2type': {'required': False},
+        }
+
+
+class Sa006Serializer(serializers.ModelSerializer):
+    """
+    業務部門其他費用定義 (sa006) Serializer
+    """
+    class Meta:
+        model = Sa006
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'spercent': {'required': False},
+            'amount': {'required': False},
+        }
+
+
+class Sa007Serializer(serializers.ModelSerializer):
+    """
+    報價其他費用定義 (sa007) Serializer
+    """
+    class Meta:
+        model = Sa007
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+            'amount': {'required': False},
+        }
+
+
+class Sa005Serializer(serializers.ModelSerializer):
+    """
+    Assortment 尺碼配比 (sa005) Serializer
+    包含 size1~22 及 pairs1~22 的完整扁平化結構。
+    """
+    class Meta:
+        model = Sa005
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'sa005_ctnpairs': {'required': False},
+        }
+
+    def validate(self, data):
+        start = data.get('sa005_startsize')
+        end = data.get('sa005_endsize')
+        max_sz = data.get('sa005_maxsize')
+        if start is not None and end is not None and start > end:
+            if max_sz is None or max_sz < start:
+                raise serializers.ValidationError(
+                    "當起始尺碼大於終止尺碼時，MaxSize 必須大於等於起始尺碼！"
+                )
+        return data
+
+
+class SysMenuSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysMenu
+        fields = '__all__'
+
+
+class SysPopedomDescSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysPopedomDesc
+        fields = '__all__'
+
+    def validate_popedom_index(self, value):
+        if value is None:
+            raise serializers.ValidationError("權限遮罩索引必須在 1 到 13 之間。")
+        try:
+            val = int(value)
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("權限遮罩索引必須在 1 到 13 之間。")
+        
+        if val < 1 or val > 13:
+            raise serializers.ValidationError("權限遮罩索引必須在 1 到 13 之間。")
+        return val
+
+    def validate(self, data):
+        # 即使是 patch 請求，也要確保這些欄位在寫入時不能為空字串或 null
+        required_fields = ['popedom_id', 'popedom_desc', 'obj_name', 'hisystem']
+        for field in required_fields:
+            if field in data:
+                val = data.get(field)
+                if val is None or str(val).strip() == '':
+                    raise serializers.ValidationError({field: "此欄位不可空白。"})
+        return data
+
+
+class SysMenuColumnSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysMenuColumn
+        fields = '__all__'
+
+    def validate(self, data):
+        required_fields = ['db_name', 'display_name', 'obj_name', 'hisystem']
+        for field in required_fields:
+            if field in data:
+                val = data.get(field)
+                if val is None or str(val).strip() == '':
+                    raise serializers.ValidationError({field: "此欄位不可空白。"})
+        return data
+
+
+class SysPopedomGroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysPopedomGroup
+        fields = '__all__'
+
+
+class SysPopedomGroupCRUDSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysPopedomGroup
+        fields = ['group_code', 'group_name', 'hisystem']
+        extra_kwargs = {
+            'group_code': {'required': False}
+        }
+
+    def validate(self, data):
+        group_name = data.get('group_name')
+        hisystem = data.get('hisystem')
+        if not group_name or not hisystem:
+            return data
+            
+        instance = self.instance
+        qs = SysPopedomGroup.objects.filter(group_name=group_name, hisystem=hisystem)
+        if instance:
+            qs = qs.exclude(group_code=instance.group_code)
+        if qs.exists():
+            raise serializers.ValidationError({"group_name": "當前系統下已存在同名的權限群組。"})
+        return data
+
+    def create(self, validated_data):
+        if 'group_code' not in validated_data or not validated_data['group_code']:
+            validated_data['group_code'] = str(uuid.uuid4()).replace('-', '')[:20]
+        return super().create(validated_data)
+
+
+class SysAccountsGroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysAccountsGroup
+        fields = '__all__'
+
+
+class ActionPermissionItemSerializer(serializers.Serializer):
+    obj_name = serializers.CharField(max_length=40)
+    menu_visible = serializers.BooleanField()
+    actions = serializers.DictField(child=serializers.BooleanField(), required=False, default=dict)
+
+
+class SavePermissionsSerializer(serializers.Serializer):
+    target_id = serializers.CharField(max_length=50)
+    is_group = serializers.BooleanField()
+    hisystem = serializers.CharField(max_length=10)
+    permissions = ActionPermissionItemSerializer(many=True)
+
+    def validate(self, data):
+        target_id = data.get('target_id')
+        is_group = data.get('is_group')
+        
+        if not is_group:
+            if not SysAccount.objects.filter(accounts_id=target_id).exists():
+                raise serializers.ValidationError({"target_id": f"使用者帳號 '{target_id}' 不存在。"})
+        else:
+            if not SysPopedomGroup.objects.filter(group_code=target_id).exists():
+                raise serializers.ValidationError({"target_id": f"權限群組 '{target_id}' 不存在。"})
+        return data
+
+
+class CopyPermissionsSerializer(serializers.Serializer):
+    source_id = serializers.CharField(max_length=50)
+    is_source_group = serializers.BooleanField()
+    target_id = serializers.CharField(max_length=50)
+    is_target_group = serializers.BooleanField()
+    hisystem = serializers.CharField(max_length=10)
+
+    def validate(self, data):
+        source_id = data.get('source_id')
+        is_source_group = data.get('is_source_group')
+        target_id = data.get('target_id')
+        is_target_group = data.get('is_target_group')
+
+        # Verify source
+        if not is_source_group:
+            if not SysAccount.objects.filter(accounts_id=source_id).exists():
+                raise serializers.ValidationError({"source_id": f"來源使用者 '{source_id}' 不存在。"})
+        else:
+            if not SysPopedomGroup.objects.filter(group_code=source_id).exists():
+                raise serializers.ValidationError({"source_id": f"來源群組 '{source_id}' 不存在。"})
+
+        # Verify target
+        if not is_target_group:
+            if not SysAccount.objects.filter(accounts_id=target_id).exists():
+                raise serializers.ValidationError({"target_id": f"目標使用者 '{target_id}' 不存在。"})
+        else:
+            if not SysPopedomGroup.objects.filter(group_code=target_id).exists():
+                raise serializers.ValidationError({"target_id": f"目標群組 '{target_id}' 不存在。"})
+        return data
+
+
+class ApplyGroupPermissionsSerializer(serializers.Serializer):
+    accounts_id = serializers.CharField(max_length=50)
+    hisystem = serializers.CharField(max_length=10)
+
+    def validate(self, data):
+        accounts_id = data.get('accounts_id')
+        if not SysAccount.objects.filter(accounts_id=accounts_id).exists():
+            raise serializers.ValidationError({"accounts_id": f"使用者帳號 '{accounts_id}' 不存在。"})
+        return data
+
 
 

@@ -28,6 +28,8 @@ import Ba090Sheet from './v2_views/Ba090Sheet';
 import Ba091Sheet from './v2_views/Ba091Sheet';
 import Es101V2Sheet from './v2_views/Es101V2Sheet';
 import Ba092Sheet from './v2_views/Ba092Sheet';
+import Ss001Sheet from './v2_views/Ss001Sheet';
+import Sy005Sheet from './v2_views/Sy005Sheet';
 import DpFlowMap from './components/DpFlowMap';
 import Dp001Sheet from './v2_views/Dp001Sheet';
 import Dp002Sheet from './v2_views/Dp002Sheet';
@@ -51,17 +53,25 @@ import Dp050Sheet from './v2_views/Dp050Sheet';
 import Dp055Sheet from './views/Dp055Sheet';
 import Dp080Sheet from './views/Dp080Sheet';
 import Dp100Sheet from './views/Dp100Sheet';
-import Dp060Sheet from './views/Dp060Sheet';
-import Dp065Sheet from './views/Dp065Sheet';
+import Dp060Sheet from './v2_views/Dp060Sheet';
+import Dp065Sheet from './v2_views/Dp065Sheet';
 
 import Mr001Sheet from './v2_views/Mr001Sheet';
 import Mr002Sheet from './v2_views/Mr002Sheet';
+import Mr015Sheet from './v2_views/Mr015Sheet';
 import Mr020Sheet from './v2_views/Mr020Sheet';
 import Mr025Sheet from './v2_views/Mr025Sheet';
+import Mr030Sheet from './v2_views/Mr030Sheet';
 import Mr031Sheet from './v2_views/Mr031Sheet';
 
-import Dp070Sheet from './views/Dp070Sheet';
-import Dp095Sheet from './views/Dp095Sheet';
+import Dp070Sheet from './v2_views/Dp070Sheet';
+import Dp095Sheet from './v2_views/Dp095Sheet';
+
+// 💼 業務部門管理系統 (Sales Administration - SA) Pattern A
+import Sa001Sheet from './v2_views/Sa001Sheet';
+import Sa005Sheet from './v2_views/Sa005Sheet';
+import Sa006Sheet from './v2_views/Sa006Sheet';
+import Sa007Sheet from './v2_views/Sa007Sheet';
 import { message } from 'antd';
 import { X } from 'lucide-react';
 import useAuth from './auth/useAuth';
@@ -78,6 +88,10 @@ function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState('navigation');
 
+  React.useEffect(() => {
+    console.log('[App Debug] activeTabId changed to:', activeTabId);
+  }, [activeTabId]);
+
   // 🛰️ 側欄折疊與展開狀態 (底層必備框架控制)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -89,6 +103,11 @@ function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const activeTabPermissionKey = activeTabId === 'navigation' || activeTabId === 'dp_map'
+    ? null
+    : inferPermissionKey(activeTabId);
+  const isAuthorized = !activeTabPermissionKey || canOpenProgram(permissions, activeTabPermissionKey, user);
 
   // 開啟新視窗 (動態 Singleton 路由機制)
   const handleOpenSheet = useCallback((sheetId, sheetLabel, params = {}) => {
@@ -242,7 +261,34 @@ function App() {
 
           {/* 📄 視窗主顯示區域 (動態 MDI Router) */}
           <div className="mdi-sheet-container">
-            {activeTabId === 'navigation' ? (
+            {console.log("[MDI DEBUG] activeTabId:", activeTabId)}
+            {!isAuthorized ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                height: '100%', width: '100%', gap: '16px', color: '#ef4444',
+                backgroundColor: 'var(--app-bg-panel)', borderRadius: 'var(--border-radius-lg)',
+                border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-md)'
+              }}>
+                <span style={{ fontSize: '48px' }}>🚫</span>
+                <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                  403 存取被拒絕
+                </h2>
+                <p style={{ fontSize: '14px', margin: 0 }}>
+                  對不起，您沒有此作業 [{activeTabId.toUpperCase()}] 的存取權限，請聯絡系統管理員。
+                </p>
+                <button
+                  className="modern-btn"
+                  style={{ height: '36px', padding: '0 20px', marginTop: '8px', borderRadius: 'var(--border-radius-md)' }}
+                  onClick={(e) => handleCloseTab(e, activeTabId)}
+                >
+                  關閉此頁面
+                </button>
+              </div>
+            ) : activeTabId === 'ss001' ? (
+              <Ss001Sheet />
+            ) : activeTabId === 'sy005' ? (
+              <Sy005Sheet />
+            ) : activeTabId === 'navigation' ? (
               <Dashboard onOpenSheet={handleOpenSheet} />
             ) : activeTabId === 'dp_map' ? (
               <DpFlowMap onOpenSheet={handleOpenSheet} />
@@ -304,10 +350,14 @@ function App() {
               <Mr001Sheet />
             ) : activeTabId === 'mr002' ? (
               <Mr002Sheet />
+            ) : activeTabId === 'mr015' ? (
+              <Mr015Sheet />
             ) : activeTabId === 'mr020' ? (
               <Mr020Sheet />
             ) : activeTabId === 'mr025' ? (
               <Mr025Sheet />
+            ) : activeTabId === 'mr030' ? (
+              <Mr030Sheet />
             ) : activeTabId === 'mr031' ? (
               <Mr031Sheet />
             ) : activeTabId === 'ba001' ? (
@@ -362,6 +412,14 @@ function App() {
               <Ba092Sheet />
             ) : activeTabId === 'es101' ? (
               <Es101V2Sheet />
+            ) : activeTabId === 'sa001' ? (
+              <Sa001Sheet />
+            ) : activeTabId === 'sa005' ? (
+              <Sa005Sheet />
+            ) : activeTabId === 'sa006' ? (
+              <Sa006Sheet />
+            ) : activeTabId === 'sa007' ? (
+              <Sa007Sheet />
             ) : (
               <div style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -408,6 +466,8 @@ function App() {
 // 幫助小工具：根據代號回填標題
 function getMockLabel(id) {
   const labels = {
+    'ss001': '選單與權限啟用設定',
+    'sy005': '使用者與群組權限管理',
     'ba001': '個人片語字庫設定',
     'ba002': '國家設定',
     'ba003': '產地設定',
@@ -467,7 +527,34 @@ function getMockLabel(id) {
     'mr002': '顏色大類設定',
     'mr020': '材料厚度設定',
     'mr025': '材料幅度設定',
-    'mr031': '加工方式設定'
+    'mr031': '加工方式設定',
+
+    // 💼 業務部門管理系統 (Sales Administration - SA)
+    'sa001': '業務片語字庫',
+    'sa005': 'Assortment 設定',
+    'sa006': '其他費用設定',
+    'sa007': '報價其他費用設定',
+    'sa010': '報價資料管理',
+    'sa015': '開模通知單',
+    'sa018': '外部訂單匯入作業',
+    'sa020': '預告訂單資料管理',
+    'sa030': '正式訂單資料管理',
+    'sa040': 'PI 訂單資料管理',
+    'sa045': '訂單狀態審核管理',
+    'sa046': '配件收受資料管理',
+    'sa048': '預接訂單查詢',
+    'sa050': '退貨訂單查詢',
+    'sa055': '客戶訂單查詢',
+    'sa058': '未出貨完成訂單查詢',
+    'sa060': '工廠訂單查詢',
+    'sa065': '利潤預估查詢',
+    'sa070': '型體接單統計查詢',
+    'sa075': '客戶接單統計查詢',
+    'sa080': '工廠接單統計查詢',
+    'sa085': '客戶索樣與接單統計分析',
+    'sa090': '暢銷型體查詢',
+    'sa095': '信件內容整合管理',
+    'sa096': '未收到 LC 查詢',
   };
   return labels[id] || `作業 [${id.toUpperCase()}]`;
 }

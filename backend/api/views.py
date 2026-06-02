@@ -1,15 +1,19 @@
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from core.permissions import HasProgramPermission
-from django.db.models import Max
+from core.permissions import HasProgramPermission, HasSy005Permission
+from core.authz.services import get_current_es101gkey, apply_create_audit_fields, apply_update_audit_fields
+from api.services.permission_matrix_service import PermissionMatrixService
+
+from django.db.models import Max, Q
 from django.db import transaction, IntegrityError
 from .models import (
     Ab230, Ab231,
     Ba001, Ba002, Ba003, Ba004, Ba005, Ba009, Ba010, Ba011, Ba012, Ba013, Ba014, Ba015, Ba016, Ba020, Ba040,
     Ba045, Ba050, Ba055, Ba060, Ba061, Ba065, Ba070, Ba075, Ba076,
-    Ba080, Ba085, Ba090, Ba091, Ba092, SysAccount, Es101, Es102, Es103, Es104,
+    Ba080, Ba085, Ba090, Ba091, Ba092, SysAccount, SysMenu, SysPopedomDesc, SysMenuColumn, Es101, Es102, Es103, Es104,
+    SysPopedomGroup, SysAccountsGroup,
     Dp001, Dp002, Dp003, Dp004, Dp004A, Dp005, Dp006, Dp008, Dp009, Dp007,
     Dp010, Dp015, Dp020,
     Dp016, Dp017, Dp018,
@@ -17,7 +21,8 @@ from .models import (
     Dp025, Dp026, Dp027, Dp028,
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
     Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
-    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031, Mr035
+    Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031, Mr035,
+    Sa006, Sa007, Sa005
 )
 from .serializers import (
     Ab230Serializer, Ab231Serializer,
@@ -26,7 +31,7 @@ from .serializers import (
     Ba075Serializer, Ba076Serializer, Ba080Serializer, Ba090Serializer, Ba091Serializer,
     Ba092Serializer, Ba015Serializer, Ba016Serializer,
     Ba010Serializer, Ba011Serializer, Ba012Serializer, Ba013Serializer, Ba014Serializer,
-    Ba085Serializer, SysAccountSerializer, Es101Serializer, Es102Serializer, Es103Serializer, Es104Serializer,
+    Ba085Serializer, SysAccountSerializer, SysMenuSerializer, SysPopedomDescSerializer, SysMenuColumnSerializer, Es101Serializer, Es102Serializer, Es103Serializer, Es104Serializer,
     Dp001Serializer, Dp002Serializer, Dp003Serializer, Dp004Serializer, Dp004ASerializer, Dp005Serializer, Dp006Serializer, Dp008Serializer, Dp009Serializer,
     Dp007Serializer, Dp010Serializer, Dp015Serializer, Dp020Serializer,
     Dp016Serializer, Dp017Serializer, Dp018Serializer,
@@ -36,8 +41,13 @@ from .serializers import (
     Dp040Serializer, Dp041Serializer, Dp042Serializer, Dp043Serializer,
     Dp080Serializer, Dp081Serializer, Dp082Serializer,
     Dp100Serializer, Dp101Serializer,
-    PhraseSerializer, Mr002Serializer, Mr015Serializer, Mr016Serializer, Mr020Serializer, Mr025Serializer, Mr030Serializer, Mr031Serializer
+    PhraseSerializer, Mr002Serializer, Mr015Serializer, Mr016Serializer, Mr020Serializer, Mr025Serializer, Mr030Serializer, Mr031Serializer,
+    Sa001Serializer, Sa006Serializer, Sa007Serializer, Sa005Serializer,
+    SysPopedomGroupSerializer, SysAccountsGroupSerializer, SavePermissionsSerializer, CopyPermissionsSerializer, ApplyGroupPermissionsSerializer,
+    SysAccountCreateSerializer, SysAccountUpdateSerializer, SysPopedomGroupCRUDSerializer
 )
+from django.shortcuts import get_object_or_404
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -64,48 +74,6 @@ def dashboard_stats(request):
     }, status=status.HTTP_200_OK)
 
 
-class Ba001ViewSet(viewsets.ModelViewSet):
-    """
-    個人片語字庫 API 視圖，全面還原 PB 業務邏輯 (特規：具有 ADMIN 人員資料隔離)
-    """
-    program_id = 'w_ba001'
-    serializer_class = Ba001Serializer
-    
-    def get_queryset(self):
-        return Ba001.objects.filter(es101gkey='ADMIN')
-
-    @action(detail=False, methods=['post'], url_path='bulk_save')
-    def bulk_save(self, request):
-        upsert_data = request.data.get('upsert', [])
-        delete_keys = request.data.get('delete', [])
-        try:
-            with transaction.atomic():
-                if delete_keys:
-                    Ba001.objects.filter(gkey__in=delete_keys, es101gkey='ADMIN').delete()
-                current_max = self.get_queryset().aggregate(Max('serialno'))['serialno__max'] or 0
-                for item in upsert_data:
-                    data_copy = {k: v for k, v in item.items()}
-                    gkey = data_copy.get('gkey')
-                    if gkey and str(gkey).startswith('temp_'): 
-                        data_copy.pop('gkey', None)
-                        data_copy.pop('serialno', None)
-                        data_copy.pop('es101gkey', None)
-                        current_max += 1
-                        serializer = Ba001Serializer(data=data_copy)
-                        serializer.is_valid(raise_exception=True)
-                        serializer.save(es101gkey='ADMIN', serialno=current_max)
-                    elif gkey:
-                        data_copy.pop('serialno', None)
-                        data_copy.pop('es101gkey', None)
-                        instance = Ba001.objects.get(gkey=gkey, es101gkey='ADMIN')
-                        serializer = Ba001Serializer(instance, data=data_copy, partial=True)
-                        serializer.is_valid(raise_exception=True)
-                        serializer.save()
-            return Response({"success": True, "message": "個人片語存檔成功"})
-        except Exception as e:
-            return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
 class BaseDictionaryViewSet(viewsets.ModelViewSet):
     """
     🚀 通用字典 API 視圖基底 (100% DRY)
@@ -117,6 +85,24 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
             return self.queryset.order_by('serialno')
         except Exception:
             return self.queryset.all()
+
+    def perform_create(self, serializer):
+        extra_fields = {}
+        apply_create_audit_fields(extra_fields, self.request, model_cls=self.queryset.model)
+        if self.queryset.model.__name__ == 'Ba001':
+            extra_fields['f2type'] = 'BA'
+        elif self.queryset.model.__name__ == 'Dp001':
+            extra_fields['f2type'] = 'DP'
+        serializer.save(**extra_fields)
+
+    def perform_update(self, serializer):
+        extra_fields = {}
+        apply_update_audit_fields(extra_fields, self.request, model_cls=self.queryset.model)
+        if self.queryset.model.__name__ == 'Ba001':
+            extra_fields['f2type'] = 'BA'
+        elif self.queryset.model.__name__ == 'Dp001':
+            extra_fields['f2type'] = 'DP'
+        serializer.save(**extra_fields)
 
     @action(detail=False, methods=['post'], url_path='bulk_save')
     def bulk_save(self, request):
@@ -137,7 +123,12 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 # 1. 物理刪除
                 if delete_keys:
-                    model_cls.objects.filter(gkey__in=delete_keys).delete()
+                    if model_cls.__name__ == 'Ba001':
+                        model_cls.objects.filter(gkey__in=delete_keys, f2type='BA').delete()
+                    elif model_cls.__name__ == 'Dp001':
+                        model_cls.objects.filter(gkey__in=delete_keys, f2type='DP').delete()
+                    else:
+                        model_cls.objects.filter(gkey__in=delete_keys).delete()
                 
                 # 2. 物理新增或異動修改
                 current_max = 0
@@ -153,6 +144,14 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
                         # 自動新增 (觸發 generate_pb_gkey)
                         data_copy.pop('gkey', None)
                         provided_serialno = data_copy.pop('serialno', None)
+                        
+                        # 自動補上 create audit fields 和 es101gkey
+                        apply_create_audit_fields(data_copy, request, model_cls=model_cls)
+                        
+                        if model_cls.__name__ == 'Ba001':
+                            data_copy['f2type'] = 'BA'
+                        elif model_cls.__name__ == 'Dp001':
+                            data_copy['f2type'] = 'DP'
                         
                         serializer = serializer_cls(data=data_copy)
                         serializer.is_valid(raise_exception=True)
@@ -170,14 +169,38 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
                     elif gkey:
                         # 單行物理更新
                         # 💡 物理優化：不再強制 pop serialno，允許前端異動排序
-                        instance = model_cls.objects.get(gkey=gkey)
+                        if model_cls.__name__ == 'Ba001':
+                            instance = model_cls.objects.get(gkey=gkey, f2type='BA')
+                        elif model_cls.__name__ == 'Dp001':
+                            instance = model_cls.objects.get(gkey=gkey, f2type='DP')
+                        else:
+                            instance = model_cls.objects.get(gkey=gkey)
+                        
+                        # 自動補上 update audit fields
+                        apply_update_audit_fields(data_copy, request, model_cls=model_cls)
+                        
+                        if model_cls.__name__ == 'Ba001':
+                            data_copy['f2type'] = 'BA'
+                        elif model_cls.__name__ == 'Dp001':
+                            data_copy['f2type'] = 'DP'
+                        
                         serializer = serializer_cls(instance, data=data_copy, partial=True)
                         serializer.is_valid(raise_exception=True)
                         instance = serializer.save()
                         upserted_instances.append(instance)
                     else:
                         # 例外防呆
+                        data_copy.pop('gkey', None)
                         data_copy.pop('serialno', None)
+                        
+                        # 自動補上 create audit fields 和 es101gkey
+                        apply_create_audit_fields(data_copy, request, model_cls=model_cls)
+                        
+                        if model_cls.__name__ == 'Ba001':
+                            data_copy['f2type'] = 'BA'
+                        elif model_cls.__name__ == 'Dp001':
+                            data_copy['f2type'] = 'DP'
+                        
                         serializer = serializer_cls(data=data_copy)
                         serializer.is_valid(raise_exception=True)
                         if has_serialno:
@@ -198,6 +221,16 @@ class BaseDictionaryViewSet(viewsets.ModelViewSet):
         except Exception as e:
             # 強迫報出具體 unique 錯誤等細節
             return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class Ba001ViewSet(BaseDictionaryViewSet):
+    """
+    個人片語字庫 API 視圖，全面還原 PB 業務邏輯 (特規：以 f2type='BA' 區分片語資料)
+    """
+    program_id = 'w_ba001'
+    queryset = Ba001.objects.filter(f2type='BA')
+    serializer_class = Ba001Serializer
+
 
 
 # 💎 具體實作：極速宣告
@@ -846,57 +879,11 @@ class Es104ViewSet(viewsets.ModelViewSet):
 
 class Dp001ViewSet(BaseDictionaryViewSet):
     """
-    開發片語字庫 API，模仿 ba001 支援個人隔離，
-    因為繼承 BaseDictionaryViewSet，自帶高度相容 PB 的 bulk_save 髒交易存檔演算法。
+    開發片語字庫 API (特規：以 f2type='DP' 區分片語資料)
     """
     program_id = 'w_dp001'
-    queryset = Dp001.objects.all()
+    queryset = Dp001.objects.filter(f2type='DP')
     serializer_class = Dp001Serializer
-
-    def get_queryset(self):
-        # 模仿 ba001 將其過濾出登入者 'ADMIN' 筆記，物理隔離
-        return Dp001.objects.filter(es101gkey='ADMIN').order_by('serialno')
-
-    @action(detail=False, methods=['post'], url_path='bulk_save')
-    def bulk_save(self, request):
-        # 個人隔離版需覆寫 bulk_save 寫死 es101gkey = 'ADMIN'
-        upsert_data = request.data.get('upsert', [])
-        delete_keys = request.data.get('delete', [])
-        try:
-            with transaction.atomic():
-                if delete_keys:
-                    Dp001.objects.filter(gkey__in=delete_keys, es101gkey='ADMIN').delete()
-                
-                current_max = Dp001.objects.filter(es101gkey='ADMIN').aggregate(Max('serialno'))['serialno__max'] or 0
-                
-                for item in upsert_data:
-                    data_copy = {k: v for k, v in item.items()}
-                    gkey = data_copy.get('gkey')
-                    
-                    if gkey and str(gkey).startswith('temp_'):
-                        data_copy.pop('gkey', None)
-                        provided_serialno = data_copy.pop('serialno', None)
-                        
-                        serializer = Dp001Serializer(data=data_copy)
-                        serializer.is_valid(raise_exception=True)
-                        
-                        try:
-                            final_sn = int(provided_serialno)
-                        except (TypeError, ValueError):
-                            current_max += 1
-                            final_sn = current_max
-                        
-                        serializer.save(es101gkey='ADMIN', serialno=final_sn)
-                    elif gkey:
-                        # 💡 物理優化：允許更新 serialno
-                        data_copy.pop('es101gkey', None)
-                        instance = Dp001.objects.get(gkey=gkey, es101gkey='ADMIN')
-                        serializer = Dp001Serializer(instance, data=data_copy, partial=True)
-                        serializer.is_valid(raise_exception=True)
-                        serializer.save()
-            return Response({"success": True, "message": "開發片語存檔成功"})
-        except Exception as e:
-            return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class Dp002ViewSet(BaseDictionaryViewSet):
@@ -3527,6 +3514,8 @@ def upload_image(request):
 
 class Mr010ViewSet(viewsets.ViewSet):
     """Mock顏色明細設定 (MR010)"""
+    program_id = 'w_mr010'
+
     def list(self, request):
         return Response([
             {"gkey": "clr_gkey_1", "colorcode": "01", "colorname": "紅色"},
@@ -3539,6 +3528,8 @@ class Mr010ViewSet(viewsets.ViewSet):
 
 class Mr035ViewSet(viewsets.ViewSet):
     """Mock材料品名設定 (MR035)"""
+    program_id = 'w_mr035'
+
     def list(self, request):
         return Response([
             {"gkey": "mat_gkey_1", "mstkno": "MAT-001", "mname": "皮革"},
@@ -3547,6 +3538,667 @@ class Mr035ViewSet(viewsets.ViewSet):
             {"gkey": "mat_gkey_4", "mstkno": "MAT-004", "mname": "帆布"},
             {"gkey": "mat_gkey_5", "mstkno": "MAT-005", "mname": "PU"},
         ])
+
+
+
+# ============================================================================
+# 💰 DP055 樣品成本核算管理 API
+# ============================================================================
+
+from decimal import Decimal, InvalidOperation
+from django.utils import timezone as tz_utils
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DP055 Helper Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _dp055_to_decimal(value, default="0") -> Decimal:
+    """安全轉換為 Decimal。None / '' / 非數值均回傳 default。"""
+    if value is None or value == "":
+        return Decimal(default)
+    try:
+        return Decimal(str(value))
+    except InvalidOperation:
+        return Decimal(default)
+
+
+def get_cost_parameter() -> Decimal:
+    """
+    取得系統預設損耗率 (CostParameter)，單位為百分比（如 2 代表 2%）。
+
+    TODO: 從系統參數表（SysParam / 系統設定模組）讀取 CostParameter。
+          目前 hardcode 為 2。待系統設定模組對接後，替換此 return。
+    """
+    return Decimal("2")
+
+
+def get_nutax_parameter() -> Decimal:
+    """
+    取得未稅比率 (NutaxParameter)，如 0.83 代表未稅成本 = 稅前成本 × 0.83。
+
+    TODO: 從系統參數表（SysParam / 系統設定模組）讀取 NutaxParameter。
+          目前 hardcode 為 0.83。待系統設定模組對接後，替換此 return。
+    """
+    return Decimal("0.83")
+
+
+def _recalculate_dp032_row(row, color_index: int, nutax_rate: Decimal) -> dict:
+    """
+    重新計算 dp032 某一行某配色 N 的衍生成本欄位，回傳需要 update 的欄位 dict。
+
+    公式：
+        grossyieldN = yieldN × (1 + lossN / 100)
+        totalcostN  = grossyieldN × costN
+        nutaxN      = totalcostN × nutax_rate
+    """
+    n = color_index
+    y = _dp055_to_decimal(getattr(row, f'yield{n}', 0))
+    l = _dp055_to_decimal(getattr(row, f'loss{n}', 0))
+    c = _dp055_to_decimal(getattr(row, f'cost{n}', 0))
+    gross = y * (1 + l / 100)
+    total = gross * c
+    nutax = total * nutax_rate
+    return {
+        f'grossyield{n}': gross.quantize(Decimal("0.0001")),
+        f'totalcost{n}': total.quantize(Decimal("0.0001")),
+        f'nutax{n}': nutax.quantize(Decimal("0.0001")),
+    }
+
+
+def _recalculate_total_fob(wagescost, managecost, profit, colors, bom_rows) -> Decimal:
+    """
+    計算 totalfob。
+
+    公式：
+        lop      = wagescost + managecost + profit
+        totalfob = lop + Σ (totalcostN / exrateN)  for each chk='Y' color N
+
+    注意：
+    - 只計算 dp031.chk = 'Y' 的配色 serialno。
+    - 若沒有任何 chk='Y'，暫以 serialno=1 計算，避免 totalfob=0。
+      TODO: 確認 PB 原始行為，無打勾配色時是否允許核算。
+    - exrateN 為 0 或 None 時，強制視為 1，避免除以 0。
+    """
+    lop = _dp055_to_decimal(wagescost) + _dp055_to_decimal(managecost) + _dp055_to_decimal(profit)
+
+    chk_serials = [c.serialno for c in colors if c.chk == 'Y']
+    if not chk_serials:
+        # TODO: 確認 PB 無打勾配色時的正確行為，暫以 serialno=1 計算
+        chk_serials = [1]
+
+    material_sum = Decimal("0")
+    for row in bom_rows:
+        for n in chk_serials:
+            total = _dp055_to_decimal(getattr(row, f'totalcost{n}', 0))
+            exrate = _dp055_to_decimal(getattr(row, f'exrate{n}', 1), "1")
+            if exrate == Decimal("0"):
+                exrate = Decimal("1")
+            material_sum += total / exrate
+
+    return (lop + material_sum).quantize(Decimal("0.0001"))
+
+
+def _build_workbench_response(dp030_obj) -> dict:
+    """
+    組裝 retrieve_workbench / import_sample / save_costing 的統一回傳結構。
+
+    欄位 Mapping 注意事項：
+        response['master']['ba060gkey'] ← dp030.aba060gkey
+        (DP055 API field "ba060gkey" maps to legacy dp030.aba060gkey.
+         Do NOT create dp030.ba060gkey. See implementation_plan.md for rationale.)
+    """
+    colors = list(dp030_obj.details_dp031.order_by('serialno'))
+    bom_rows = list(dp030_obj.details_dp032.order_by('serialno'))
+
+    master = {
+        "gkey": dp030_obj.gkey,
+        "sampleno": dp030_obj.sampleno,
+        "styleno": dp030_obj.styleno or "",
+        "stylename": dp030_obj.stylename or "",
+        "year": dp030_obj.year or "",
+        "status": dp030_obj.status or "",
+        "cost": dp030_obj.cost or "N",
+        "costdate": dp030_obj.costdate.isoformat() if dp030_obj.costdate else None,
+        "wagescost": str(dp030_obj.wagescost or 0),
+        "managecost": str(dp030_obj.managecost or 0),
+        "profit": str(dp030_obj.profit or 0),
+        "lop": str(dp030_obj.lop or 0),
+        "totalfob": str(dp030_obj.totalfob or 0),
+        "costremark": dp030_obj.costremark or "",
+        "capprove": dp030_obj.capprove or "N",
+        # DP055 API field "ba060gkey" maps to legacy dp030.aba060gkey.
+        # Do NOT create dp030.ba060gkey.
+        "ba060gkey": dp030_obj.aba060gkey_id,
+    }
+
+    colors_data = []
+    for c in colors:
+        colors_data.append({
+            "gkey": c.gkey,
+            "dp030gkey": c.dp030gkey_id,
+            "serialno": c.serialno,
+            "colorno": c.colorcode or "",
+            "cname": c.color or "",
+            "ename": c.ecolor or "",
+            "totalpairs": str(c.totalpairs or 0),
+            "chk": c.chk or "N",
+            "photopath": c.photopath or "",
+        })
+
+    bom_data = []
+    for row in bom_rows:
+        bom_data.append({
+            "gkey": row.gkey,
+            "dp030gkey": row.dp030gkey_id,
+            "serialno": row.serialno,
+            "parts": row.parts or "",
+            "eparts": row.eparts or "",
+            "qprp": str(row.qprp or 0),
+            # Color 1
+            "cost1": str(row.cost1 or 0),
+            "yield1": str(row.yield1 or 0),
+            "loss1": str(row.loss1 or 0),
+            "grossyield1": str(row.grossyield1 or 0),
+            "totalcost1": str(row.totalcost1 or 0),
+            "nutax1": str(row.nutax1 or 0),
+            "exrate1": str(row.exrate1 or 1),
+            "uom1": row.uom1 or "",
+            # Color 2
+            "cost2": str(row.cost2 or 0),
+            "yield2": str(row.yield2 or 0),
+            "loss2": str(row.loss2 or 0),
+            "grossyield2": str(row.grossyield2 or 0),
+            "totalcost2": str(row.totalcost2 or 0),
+            "nutax2": str(row.nutax2 or 0),
+            "exrate2": str(row.exrate2 or 1),
+            "uom2": row.uom2 or "",
+            # Color 3
+            "cost3": str(row.cost3 or 0),
+            "yield3": str(row.yield3 or 0),
+            "loss3": str(row.loss3 or 0),
+            "grossyield3": str(row.grossyield3 or 0),
+            "totalcost3": str(row.totalcost3 or 0),
+            "nutax3": str(row.nutax3 or 0),
+            "exrate3": str(row.exrate3 or 1),
+            "uom3": row.uom3 or "",
+            # Color 4
+            "cost4": str(row.cost4 or 0),
+            "yield4": str(row.yield4 or 0),
+            "loss4": str(row.loss4 or 0),
+            "grossyield4": str(row.grossyield4 or 0),
+            "totalcost4": str(row.totalcost4 or 0),
+            "nutax4": str(row.nutax4 or 0),
+            "exrate4": str(row.exrate4 or 1),
+            "uom4": row.uom4 or "",
+        })
+
+    return {
+        "master": master,
+        "colors": colors_data,
+        "bom_details": bom_data,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dp055ViewSet
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Dp055ViewSet(viewsets.ViewSet):
+    """
+    DP055 樣品成本核算管理專用 ViewSet。
+
+    使用既有 dp030 / dp031 / dp032 三張資料表。
+    不新增 dp055 table。
+
+    API field mapping:
+        master.ba060gkey  ←→  dp030.aba060gkey  (legacy field, do NOT add dp030.ba060gkey)
+    """
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_dp055'
+
+    # ── list_costed ──────────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'], url_path='list_costed')
+    def list_costed(self, request):
+        """
+        查詢已完成成本核算的樣品單（dp030.cost = 'Y'）。
+
+        GET /api/dp055/list_costed/
+        支援 query params：sampleno, styleno, year, ba010gkey, ba015gkey, ba055gkey, status, capprove
+        """
+        try:
+            qs = Dp030.objects.filter(cost='Y').select_related(
+                'ba010gkey', 'ba015gkey', 'ba055gkey', 'ba009gkey', 'aba060gkey'
+            ).order_by('-costdate', '-sampleno')
+
+            # Query params filtering
+            sampleno = request.query_params.get('sampleno')
+            styleno = request.query_params.get('styleno')
+            year = request.query_params.get('year')
+            ba010gkey = request.query_params.get('ba010gkey')
+            ba015gkey = request.query_params.get('ba015gkey')
+            ba055gkey = request.query_params.get('ba055gkey')
+            status_val = request.query_params.get('status')
+            capprove = request.query_params.get('capprove')
+
+            if sampleno:
+                qs = qs.filter(sampleno__icontains=sampleno)
+            if styleno:
+                qs = qs.filter(styleno__icontains=styleno)
+            if year:
+                qs = qs.filter(year=year)
+            if ba010gkey:
+                qs = qs.filter(ba010gkey_id=ba010gkey)
+            if ba015gkey:
+                qs = qs.filter(ba015gkey_id=ba015gkey)
+            if ba055gkey:
+                qs = qs.filter(ba055gkey_id=ba055gkey)
+            if status_val:
+                qs = qs.filter(status=status_val)
+            if capprove:
+                qs = qs.filter(capprove=capprove)
+
+            results = []
+            for obj in qs[:500]:
+                results.append({
+                    "gkey": obj.gkey,
+                    "sampleno": obj.sampleno,
+                    "styleno": obj.styleno or "",
+                    "stylename": obj.stylename or "",
+                    "year": obj.year or "",
+                    "season": obj.ba055gkey.groupcode if obj.ba055gkey else "",
+                    "customer": obj.ba010gkey.shortname if obj.ba010gkey else "",
+                    "factory": obj.ba015gkey.shortname if obj.ba015gkey else "",
+                    "brand": obj.ba009gkey.cbrand if obj.ba009gkey else "",
+                    "status": obj.status or "",
+                    "capprove": obj.capprove or "N",
+                    "costdate": obj.costdate.isoformat() if obj.costdate else None,
+                    "totalfob": str(obj.totalfob or 0),
+                    "wagescost": str(obj.wagescost or 0),
+                    "managecost": str(obj.managecost or 0),
+                    "profit": str(obj.profit or 0),
+                    # DP055 API field "ba060gkey" maps to legacy dp030.aba060gkey
+                    "ba060gkey": obj.aba060gkey_id,
+                })
+
+            return Response(results)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"list_costed 查詢失敗：{str(e)}"}, status=400)
+
+    # ── list_uncosted ────────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'], url_path='list_uncosted')
+    def list_uncosted(self, request):
+        """
+        查詢尚未進行成本核算的樣品單（dp030.cost != 'Y' 或 cost is null）。
+        用作 DP055 匯入開窗的資料來源。
+
+        GET /api/dp055/list_uncosted/
+        支援 query params：sampleno, styleno, year, ba010gkey, ba015gkey, ba055gkey, status
+        """
+        try:
+            from django.db.models import Q
+            qs = Dp030.objects.filter(
+                Q(cost__isnull=True) | ~Q(cost='Y')
+            ).select_related(
+                'ba010gkey', 'ba015gkey', 'ba055gkey', 'ba009gkey'
+            ).order_by('-issuedate', '-sampleno')
+
+            # Query params filtering
+            sampleno = request.query_params.get('sampleno')
+            styleno = request.query_params.get('styleno')
+            year = request.query_params.get('year')
+            ba010gkey = request.query_params.get('ba010gkey')
+            ba015gkey = request.query_params.get('ba015gkey')
+            ba055gkey = request.query_params.get('ba055gkey')
+            status_val = request.query_params.get('status')
+
+            if sampleno:
+                qs = qs.filter(sampleno__icontains=sampleno)
+            if styleno:
+                qs = qs.filter(styleno__icontains=styleno)
+            if year:
+                qs = qs.filter(year=year)
+            if ba010gkey:
+                qs = qs.filter(ba010gkey_id=ba010gkey)
+            if ba015gkey:
+                qs = qs.filter(ba015gkey_id=ba015gkey)
+            if ba055gkey:
+                qs = qs.filter(ba055gkey_id=ba055gkey)
+            if status_val:
+                qs = qs.filter(status=status_val)
+
+            results = []
+            for obj in qs[:500]:
+                results.append({
+                    "gkey": obj.gkey,
+                    "sampleno": obj.sampleno,
+                    "styleno": obj.styleno or "",
+                    "stylename": obj.stylename or "",
+                    "year": obj.year or "",
+                    "season": obj.ba055gkey.groupcode if obj.ba055gkey else "",
+                    "customer": obj.ba010gkey.shortname if obj.ba010gkey else "",
+                    "factory": obj.ba015gkey.shortname if obj.ba015gkey else "",
+                    "brand": obj.ba009gkey.cbrand if obj.ba009gkey else "",
+                    "status": obj.status or "",
+                    "issuedate": obj.issuedate.isoformat() if obj.issuedate else None,
+                })
+
+            return Response(results)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"list_uncosted 查詢失敗：{str(e)}"}, status=400)
+
+    # ── retrieve_workbench ───────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='retrieve_workbench')
+    def retrieve_workbench(self, request, pk=None):
+        """
+        依 dp030.gkey 載入 DP055 編輯工作區資料。
+
+        GET /api/dp055/{gkey}/retrieve_workbench/
+        回傳固定三段結構：master / colors / bom_details
+        """
+        try:
+            obj = Dp030.objects.select_related('aba060gkey').get(gkey=pk)
+        except Dp030.DoesNotExist:
+            return Response({"detail": "樣品單不存在。"}, status=404)
+
+        return Response(_build_workbench_response(obj))
+
+    # ── import_sample ────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='import_sample')
+    def import_sample(self, request, pk=None):
+        """
+        將未核算樣品單轉入 DP055 成本核算工作區（初始化核算欄位）。
+
+        POST /api/dp055/{gkey}/import_sample/
+
+        注意：
+        - 若 dp030.cost = 'Y'，拒絕重複匯入（請先 reset_costing）。
+        - 初始化 dp030 核算欄位（不清空 aba060gkey）。
+        - 初始化 dp032 各色的 loss/yield/exrate/grossyield/totalcost/nutax。
+        - 初始化 dp031.chk = 'N'。
+        """
+        try:
+            obj = Dp030.objects.get(gkey=pk)
+        except Dp030.DoesNotExist:
+            return Response({"detail": "樣品單不存在。"}, status=404)
+
+        if obj.cost == 'Y':
+            return Response(
+                {"detail": "此樣品單已完成核算（cost='Y'）。若要重新核算，請先執行 reset_costing。"},
+                status=400
+            )
+
+        cost_param = get_cost_parameter()    # 損耗率預設 (e.g. 2%)
+        nutax_rate = get_nutax_parameter()   # 未稅比率 (e.g. 0.83)
+
+        try:
+            with transaction.atomic():
+                today = tz_utils.now().date()
+
+                # 初始化 dp030 核算欄位
+                # NOTE: aba060gkey 保留，不清空（幣別是樣品單既有屬性）
+                obj.costdate = today
+                obj.cost = 'N'   # 尚未完成，等 save_costing 才設 'Y'
+                obj.wagescost = Decimal("0")
+                obj.managecost = Decimal("0")
+                obj.profit = Decimal("0")
+                obj.lop = Decimal("0")
+                obj.totalfob = Decimal("0")
+                obj.capprove = 'N'
+                obj.costremark = ''
+                obj.save(update_fields=[
+                    'costdate', 'cost', 'wagescost', 'managecost', 'profit',
+                    'lop', 'totalfob', 'capprove', 'costremark'
+                ])
+
+                # 初始化 dp031.chk = 'N'
+                # TODO: 確認 PB 行為，是否某些情況下 chk 需預設 'Y'
+                colors = list(obj.details_dp031.order_by('serialno'))
+                for color in colors:
+                    color.chk = 'N'
+                    color.save(update_fields=['chk'])
+
+                # 初始化 dp032 各色成本欄位
+                bom_rows = list(obj.details_dp032.order_by('serialno'))
+                for row in bom_rows:
+                    update_fields = []
+                    for n in [1, 2, 3, 4]:
+                        # 損耗率預設 = CostParameter
+                        setattr(row, f'loss{n}', cost_param)
+                        update_fields.append(f'loss{n}')
+
+                        # yield 預設 = qprp × totalpairs[n]
+                        # 依對應 serialno=n 的配色 totalpairs 計算
+                        # TODO: PB 有特殊客戶（如 wx）的計算方式不同，目前用標準公式
+                        color_n = next((c for c in colors if c.serialno == n), None)
+                        totalpairs = _dp055_to_decimal(color_n.totalpairs if color_n else 0)
+                        qprp = _dp055_to_decimal(row.qprp)
+                        y = qprp * totalpairs
+                        setattr(row, f'yield{n}', y)
+                        update_fields.append(f'yield{n}')
+
+                        # exrate 預設 = 1（若已有值則保留）
+                        existing_exrate = _dp055_to_decimal(getattr(row, f'exrate{n}', 1), "1")
+                        if existing_exrate == Decimal("0"):
+                            existing_exrate = Decimal("1")
+                        setattr(row, f'exrate{n}', existing_exrate)
+                        update_fields.append(f'exrate{n}')
+
+                        # 計算衍生欄位
+                        derived = _recalculate_dp032_row(row, n, nutax_rate)
+                        for k, v in derived.items():
+                            setattr(row, k, v)
+                            update_fields.append(k)
+
+                    row.save(update_fields=list(set(update_fields)))
+
+                # 重新讀取後回傳
+                obj.refresh_from_db()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"import_sample 失敗：{str(e)}"}, status=400)
+
+        return Response(_build_workbench_response(obj))
+
+    # ── save_costing ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='save_costing')
+    def save_costing(self, request, pk=None):
+        """
+        儲存 DP055 工作區資料，後端重新計算並將 dp030.cost 設為 'Y'。
+
+        POST /api/dp055/{gkey}/save_costing/
+
+        Request body:
+        {
+          "master": {
+            "wagescost": 100, "managecost": 50, "profit": 30,
+            "costremark": "...",
+            "ba060gkey": "...",   <- 寫入 dp030.aba060gkey（不是 ba060gkey）
+            "capprove": "N"
+          },
+          "colors": [{"gkey": "...", "chk": "Y"}],
+          "bom_details": [{"gkey": "...", "cost1": 10, "yield1": 2, "loss1": 2, ...}]
+        }
+        """
+        try:
+            obj = Dp030.objects.select_for_update().get(gkey=pk)
+        except Dp030.DoesNotExist:
+            return Response({"detail": "樣品單不存在。"}, status=404)
+
+        # 已審核不允許修改
+        if obj.capprove == 'Y':
+            return Response(
+                {"detail": "此樣品單已審核（capprove='Y'），不允許修改。如需修改請先取消審核。"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        master_data = request.data.get('master', {})
+        colors_data = request.data.get('colors', [])
+        bom_data = request.data.get('bom_details', [])
+        nutax_rate = get_nutax_parameter()
+
+        try:
+            with transaction.atomic():
+                # 1. 更新 dp030 可編輯成本欄位
+                wagescost = _dp055_to_decimal(master_data.get('wagescost', obj.wagescost))
+                managecost = _dp055_to_decimal(master_data.get('managecost', obj.managecost))
+                profit = _dp055_to_decimal(master_data.get('profit', obj.profit))
+                lop = wagescost + managecost + profit
+
+                obj.wagescost = wagescost
+                obj.managecost = managecost
+                obj.profit = profit
+                obj.lop = lop
+                obj.costremark = master_data.get('costremark', obj.costremark or '')
+                obj.capprove = master_data.get('capprove', obj.capprove or 'N')
+
+                # DP055 API field "ba060gkey" maps to legacy dp030.aba060gkey.
+                # Do NOT write to dp030.ba060gkey.
+                if 'ba060gkey' in master_data:
+                    obj.aba060gkey_id = master_data['ba060gkey']
+
+                # 2. 更新 dp031.chk
+                color_map = {c['gkey']: c for c in colors_data if 'gkey' in c}
+                colors = list(obj.details_dp031.order_by('serialno'))
+                for color in colors:
+                    if color.gkey in color_map:
+                        color.chk = color_map[color.gkey].get('chk', color.chk or 'N')
+                        color.save(update_fields=['chk'])
+
+                # 3. 更新 dp032 核算欄位，後端重新計算衍生值
+                bom_map = {b['gkey']: b for b in bom_data if 'gkey' in b}
+                bom_rows = list(obj.details_dp032.order_by('serialno'))
+                for row in bom_rows:
+                    if row.gkey not in bom_map:
+                        continue
+                    bd = bom_map[row.gkey]
+                    update_fields = []
+
+                    for n in [1, 2, 3, 4]:
+                        changed = False
+                        for field in [f'cost{n}', f'yield{n}', f'loss{n}', f'exrate{n}', f'uom{n}']:
+                            if field in bd:
+                                # Safe exrate: cannot be 0
+                                if field.startswith('exrate'):
+                                    val = _dp055_to_decimal(bd[field], "1")
+                                    if val == Decimal("0"):
+                                        val = Decimal("1")
+                                else:
+                                    val = _dp055_to_decimal(bd[field]) if not field.startswith('uom') else (bd[field] or '')
+                                setattr(row, field, val)
+                                update_fields.append(field)
+                                changed = True
+
+                        if changed:
+                            # 後端重新計算衍生欄位（不信任前端）
+                            derived = _recalculate_dp032_row(row, n, nutax_rate)
+                            for k, v in derived.items():
+                                setattr(row, k, v)
+                                update_fields.append(k)
+
+                    if update_fields:
+                        row.save(update_fields=list(set(update_fields)))
+
+                # 4. 後端重新計算 totalfob（不信任前端的值）
+                bom_rows_fresh = list(obj.details_dp032.order_by('serialno'))
+                colors_fresh = list(obj.details_dp031.order_by('serialno'))
+                obj.totalfob = _recalculate_total_fob(
+                    wagescost, managecost, profit, colors_fresh, bom_rows_fresh
+                )
+
+                # 5. 設為已核算
+                obj.cost = 'Y'
+                if not obj.costdate:
+                    obj.costdate = tz_utils.now().date()
+
+                obj.save(update_fields=[
+                    'wagescost', 'managecost', 'profit', 'lop', 'totalfob',
+                    'costremark', 'capprove', 'aba060gkey', 'cost', 'costdate'
+                ])
+
+                obj.refresh_from_db()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"save_costing 失敗：{str(e)}"}, status=400)
+
+        return Response(_build_workbench_response(obj))
+
+    # ── reset_costing ────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='reset_costing')
+    def reset_costing(self, request, pk=None):
+        """
+        重置核算狀態（對應舊 PB 的「刪除」行為）。
+
+        POST /api/dp055/{gkey}/reset_costing/
+
+        注意：
+        - 這不是物理刪除，只是將 dp030.cost 設回 'N'，並清空核算欄位。
+        - 不清空 dp030.aba060gkey（幣別是樣品單既有屬性，不屬於核算暫存欄位）。
+        - 完成後該樣品單將重新出現在 list_uncosted。
+        """
+        try:
+            obj = Dp030.objects.get(gkey=pk)
+        except Dp030.DoesNotExist:
+            return Response({"detail": "樣品單不存在。"}, status=404)
+
+        try:
+            with transaction.atomic():
+                # 1. 重置 dp030 核算欄位
+                # 注意：aba060gkey 不清空（幣別是樣品單既有屬性）
+                obj.cost = 'N'
+                obj.costdate = None  # TODO: 確認 PB 是否保留 costdate；目前先清空
+                obj.wagescost = Decimal("0")
+                obj.managecost = Decimal("0")
+                obj.profit = Decimal("0")
+                obj.lop = Decimal("0")
+                obj.totalfob = Decimal("0")
+                obj.costremark = ''
+                obj.capprove = 'N'
+                obj.save(update_fields=[
+                    'cost', 'costdate', 'wagescost', 'managecost', 'profit',
+                    'lop', 'totalfob', 'costremark', 'capprove'
+                ])
+
+                # 2. 重置 dp031.chk = 'N'（全部配色）
+                obj.details_dp031.all().update(chk='N')
+
+                # 3. 重置 dp032 核算欄位（歸零/清空）
+                # exrate1~4 設回 1（預設匯率）
+                # TODO: 確認 PB 是否將 exrate 清為 null 或保留為 1
+                reset_vals = {}
+                for n in [1, 2, 3, 4]:
+                    reset_vals[f'yield{n}'] = Decimal("0")
+                    reset_vals[f'grossyield{n}'] = Decimal("0")
+                    reset_vals[f'totalcost{n}'] = Decimal("0")
+                    reset_vals[f'nutax{n}'] = Decimal("0")
+                    reset_vals[f'exrate{n}'] = Decimal("1")  # TODO: 或 null？先設 1
+                    reset_vals[f'uom{n}'] = ''
+                obj.details_dp032.all().update(**reset_vals)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"reset_costing 失敗：{str(e)}"}, status=400)
+
+        return Response({
+            "success": True,
+            "message": "DP055 costing reset successfully",
+            "gkey": pk,
+        })
 
 
 # ============================================================================
@@ -4240,11 +4892,261 @@ class Dp095ViewSet(viewsets.ViewSet):
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from core.permissions import HasProgramPermission
+from core.permissions import HasProgramPermission, HasSy005Permission
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
-from api.models import SysAccountsActive, generate_pb_gkey
+from api.models import SysAccountsActive, generate_pb_gkey, SysAccount, SysPopedom, SysAccountsGroup, SysPopedomGroup, Es101, Ba001, Sa006, Sa007, Sa005, SysMenu
 from core.authz.services import build_permission_map, build_menu_tree
+from rest_framework import status
+from django.db import transaction
+from django.db.models import Q, Max
+from django.shortcuts import get_object_or_404
+from api.serializers import SysAccountSerializer, SysAccountCreateSerializer, SysAccountUpdateSerializer, SysPopedomGroupSerializer, SysPopedomGroupCRUDSerializer, Sa001Serializer, Sa006Serializer, Sa007Serializer, Sa005Serializer, SysMenuSerializer
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from api.views import BaseDictionaryViewSet
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_users(request):
+    """
+    GET /api/auth/users/ -> 帳號列表
+    POST /api/auth/users/ -> 新增帳號
+    """
+    if request.method == 'GET':
+        queryset = SysAccount.objects.all().order_by('accounts_id')
+        search = request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(accounts_id__icontains=search) | Q(accounts__icontains=search)
+            )
+        status_sign = request.query_params.get('status_sign')
+        if status_sign is not None:
+            queryset = queryset.filter(status_sign=status_sign)
+        serializer = SysAccountSerializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    elif request.method == 'POST':
+        # 自我提權防護：非 superuser 管理員不可創建大於自己級別的帳號
+        current_user = request.user
+        operator_acct = SysAccount.objects.filter(Q(accounts_id=current_user.username) | Q(accounts=current_user.username)).first()
+        operator_level = int(operator_acct.peopdom_class) if operator_acct else 1
+        
+        if 'peopdom_class' in request.data:
+            new_class = int(request.data['peopdom_class'])
+            if new_class > operator_level and not current_user.is_superuser:
+                return Response({"detail": "一般管理員不可將權限等級提升至大於自己。"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        serializer = SysAccountCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user_obj = serializer.save()
+        return Response(SysAccountSerializer(user_obj).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_user_detail(request, accounts_id):
+    """
+    PATCH /api/auth/users/{accounts_id}/ -> 編輯帳號
+    DELETE /api/auth/users/{accounts_id}/ -> 刪除帳號 (級聯)
+    """
+    user_obj = get_object_or_404(SysAccount, accounts_id=accounts_id)
+    current_user = request.user
+    is_self = (user_obj.accounts_id == current_user.username or user_obj.accounts == current_user.username)
+    
+    if request.method == 'PATCH':
+        if is_self:
+            if 'peopdom_class' in request.data and str(request.data['peopdom_class']) != str(user_obj.peopdom_class):
+                return Response({"detail": "禁止修改自己的權限等級。"}, status=status.HTTP_400_BAD_REQUEST)
+            if 'status_sign' in request.data and str(request.data['status_sign']) != str(user_obj.status_sign):
+                return Response({"detail": "禁止停用/變更自己的帳號狀態。"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        # 自我提權防護
+        operator_acct = SysAccount.objects.filter(Q(accounts_id=current_user.username) | Q(accounts=current_user.username)).first()
+        operator_level = int(operator_acct.peopdom_class) if operator_acct else 1
+        if 'peopdom_class' in request.data:
+            new_class = int(request.data['peopdom_class'])
+            if new_class > operator_level and not current_user.is_superuser:
+                return Response({"detail": "一般管理員不可將權限等級提升至大於自己。"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        serializer = SysAccountUpdateSerializer(user_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_user = serializer.save()
+        return Response(SysAccountSerializer(updated_user).data)
+        
+    elif request.method == 'DELETE':
+        if is_self:
+            return Response({"detail": "禁止刪除自己當前登入的帳號。"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        with transaction.atomic():
+            SysPopedom.objects.filter(accounts_id=user_obj.accounts_id).delete()
+            SysAccountsGroup.objects.filter(accounts_id=user_obj.accounts_id).delete()
+            user_obj.delete()
+        return Response({"success": True, "message": "使用者刪除成功。"})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_user_disable(request, accounts_id):
+    user_obj = get_object_or_404(SysAccount, accounts_id=accounts_id)
+    is_self = (user_obj.accounts_id == request.user.username or user_obj.accounts == request.user.username)
+    if is_self:
+        return Response({"detail": "禁止停用自己當前登入的帳號。"}, status=status.HTTP_400_BAD_REQUEST)
+    user_obj.status_sign = '1'
+    user_obj.save()
+    return Response({"success": True, "message": "帳號已停用。"})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_user_enable(request, accounts_id):
+    user_obj = get_object_or_404(SysAccount, accounts_id=accounts_id)
+    user_obj.status_sign = '0'
+    user_obj.save()
+    return Response({"success": True, "message": "帳號已啟用。"})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_groups(request):
+    """
+    GET /api/auth/groups/ -> 群組列表
+    POST /api/auth/groups/ -> 新增群組
+    """
+    if request.method == 'GET':
+        queryset = SysPopedomGroup.objects.all().order_by('group_code')
+        hisystem = request.query_params.get('hisystem')
+        if hisystem:
+            queryset = queryset.filter(hisystem=hisystem)
+        serializer = SysPopedomGroupSerializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    elif request.method == 'POST':
+        serializer = SysPopedomGroupCRUDSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group_obj = serializer.save()
+        return Response(SysPopedomGroupSerializer(group_obj).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_group_detail(request, group_code):
+    """
+    PATCH /api/auth/groups/{group_code}/ -> 編輯群組名稱
+    DELETE /api/auth/groups/{group_code}/ -> 刪除群組 (級聯重算)
+    """
+    hisystem = request.query_params.get('hisystem') or request.data.get('hisystem')
+    if hisystem:
+        group_obj = get_object_or_404(SysPopedomGroup, group_code=group_code, hisystem=hisystem)
+    else:
+        group_obj = get_object_or_404(SysPopedomGroup, group_code=group_code)
+        hisystem = group_obj.hisystem
+        
+    if request.method == 'PATCH':
+        serializer = SysPopedomGroupCRUDSerializer(group_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_group = serializer.save()
+        return Response(SysPopedomGroupSerializer(updated_group).data)
+        
+    elif request.method == 'DELETE':
+        members_count = SysAccountsGroup.objects.filter(group_code=group_code, hisystem=hisystem).count()
+        PermissionMatrixService.delete_group_with_recalculation(group_code, hisystem)
+        return Response({
+            "success": True,
+            "message": f"群組刪除成功，已移除該群組關聯，共 {members_count} 位成員完成權限重算。"
+        })
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_user_groups(request):
+    """
+    GET /api/auth/user-groups/ -> 獲取使用者群組
+    POST /api/auth/user-groups/ -> 指派使用者加入群組 (選擇性 OR 套用)
+    DELETE /api/auth/user-groups/ -> 將使用者移出群組 (選擇性 OutGroup 扣減)
+    """
+    if request.method == 'GET':
+        accounts_id = request.query_params.get('accounts_id')
+        hisystem = request.query_params.get('hisystem')
+        if not accounts_id or not hisystem:
+            return Response({"detail": "請提供 accounts_id 與 hisystem。"}, status=status.HTTP_400_BAD_REQUEST)
+        if not SysAccount.objects.filter(accounts_id=accounts_id).exists():
+            return Response({"detail": f"使用者帳號 '{accounts_id}' 不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+        user_groups = SysAccountsGroup.objects.filter(accounts_id=accounts_id, hisystem=hisystem)
+        group_codes = list(user_groups.values_list('group_code', flat=True))
+        return Response(group_codes)
+        
+    elif request.method == 'POST':
+        accounts_id = request.data.get('accounts_id')
+        group_code = request.data.get('group_code')
+        hisystem = request.data.get('hisystem')
+        apply_permissions_val = request.data.get('apply_permissions')
+        apply_permissions = str(apply_permissions_val).lower() in ('true', '1') if apply_permissions_val is not None else True
+        
+        if not accounts_id or not group_code or not hisystem:
+            return Response({"detail": "請提供 accounts_id, group_code 與 hisystem。"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user_obj = SysAccount.objects.filter(accounts_id=accounts_id).first()
+        if not user_obj:
+            return Response({"detail": "使用者不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+        if not SysPopedomGroup.objects.filter(group_code=group_code, hisystem=hisystem).exists():
+            return Response({"detail": "權限群組不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # 自我修改防護：非 superuser 管理員禁止自我加入管理群組
+        current_user = request.user
+        is_self = (user_obj.accounts_id == current_user.username or user_obj.accounts == current_user.username)
+        if is_self and not current_user.is_superuser:
+            grp = SysPopedomGroup.objects.get(group_code=group_code, hisystem=hisystem)
+            if 'admin' in grp.group_name.lower() or '管理' in grp.group_name:
+                return Response({"detail": "非 superuser 管理員禁止將自己指派加入管理群組。"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        SysAccountsGroup.objects.update_or_create(
+            accounts_id=accounts_id,
+            group_code=group_code,
+            hisystem=hisystem
+        )
+        
+        if apply_permissions:
+            PermissionMatrixService.apply_group_permissions(accounts_id, hisystem)
+            
+        return Response({"success": True, "message": "指派群組成功。"})
+        
+    elif request.method == 'DELETE':
+        accounts_id = request.data.get('accounts_id') or request.query_params.get('accounts_id')
+        group_code = request.data.get('group_code') or request.query_params.get('group_code')
+        hisystem = request.data.get('hisystem') or request.query_params.get('hisystem')
+        recalculate_permissions_val = request.data.get('recalculate_permissions')
+        if recalculate_permissions_val is None:
+            recalculate_permissions_val = request.query_params.get('recalculate_permissions')
+        recalculate_permissions = str(recalculate_permissions_val).lower() in ('true', '1') if recalculate_permissions_val is not None else True
+        
+        if not accounts_id or not group_code or not hisystem:
+            return Response({"detail": "請提供 accounts_id, group_code 與 hisystem。"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user_obj = SysAccount.objects.filter(accounts_id=accounts_id).first()
+        if not user_obj:
+            return Response({"detail": "使用者不存在。"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # 自我修改防護：禁止自我移除最後一個管理群組
+        current_user = request.user
+        is_self = (user_obj.accounts_id == current_user.username or user_obj.accounts == current_user.username)
+        if is_self and not current_user.is_superuser:
+            all_grp_codes = list(SysAccountsGroup.objects.filter(accounts_id=accounts_id, hisystem=hisystem).values_list('group_code', flat=True))
+            admin_grps = SysPopedomGroup.objects.filter(group_code__in=all_grp_codes, hisystem=hisystem, group_name__icontains='管理')
+            if admin_grps.filter(group_code=group_code).exists() and admin_grps.count() <= 1:
+                return Response({"detail": "一般管理員禁止移除自己最後一個管理群組。"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        SysAccountsGroup.objects.filter(
+            accounts_id=accounts_id,
+            group_code=group_code,
+            hisystem=hisystem
+        ).delete()
+        
+        if recalculate_permissions:
+            PermissionMatrixService.remove_group_permissions_from_user(accounts_id, group_code, hisystem)
+            
+        return Response({"success": True, "message": "移除群組成功。"})
 
 
 def _get_sys_account(user):
@@ -4261,24 +5163,32 @@ def _get_user_info_response(user):
     employee_no = user.username
     email = ""
     privilege_class = "1"
+    es101gkey = None
 
     account = _get_sys_account(user)
     if account:
         privilege_class = account.peopdom_class
-        from api.models import Es101
+        es101gkey = account.user_id
         es101 = Es101.objects.filter(gkey=account.user_id).first()
         if es101:
             display_name = es101.englishname or es101.chinesename or user.username
             employee_no = es101.employeeno or user.username
             email = es101.email or ""
 
+    if not es101gkey:
+        from django.conf import settings
+        if getattr(settings, 'DEBUG', False):
+            es101gkey = getattr(settings, 'DEFAULT_DEV_ES101GKEY', None)
+
     return {
         "username": user.username,
         "display_name": display_name,
         "employee_no": employee_no,
         "privilege_class": privilege_class,
-        "email": email
+        "email": email,
+        "es101gkey": es101gkey
     }
+
 
 
 @api_view(['POST'])
@@ -4376,9 +5286,278 @@ def auth_menu(request):
     return Response(menu_tree)
 
 
+# ============================================================================
+# 💼 業務部門管理系統 (Sales Administration - SA) ViewSets
+# Pattern A 單表 CRUD 作業
+# ============================================================================
+
+class Sa001ViewSet(BaseDictionaryViewSet):
+    """
+    sa001 業務片語字庫
+    重用 ba001 表，以 f2type='SA' 區分業務部門片語。
+    新增行時自動帶入 f2type='SA'。
+    """
+    program_id = 'w_sa001'
+    queryset = Ba001.objects.filter(f2type='SA')
+    serializer_class = Sa001Serializer
+
+    def perform_create(self, serializer):
+        """強制指定 f2type='SA'，防止覟份其他模組的片語資料。"""
+        current_max = self.queryset.aggregate(Max('serialno'))['serialno__max'] or 0
+        serializer.save(f2type='SA', serialno=current_max + 1)
+
+    @action(detail=False, methods=['post'], url_path='bulk_save')
+    def bulk_save(self, request):
+        """批次存檔 (upsert + delete)，限定在 f2type='SA' 範圍內。"""
+        upsert_data = request.data.get('upsert', [])
+        delete_keys = request.data.get('delete', [])
+
+        try:
+            with transaction.atomic():
+                if delete_keys:
+                    Ba001.objects.filter(gkey__in=delete_keys, f2type='SA').delete()
+
+                current_max = self.queryset.aggregate(Max('serialno'))['serialno__max'] or 0
+                upserted_instances = []
+
+                for item in upsert_data:
+                    data_copy = {k: v for k, v in item.items()}
+                    gkey = data_copy.get('gkey')
+
+                    if gkey and str(gkey).startswith('temp_'):
+                        data_copy.pop('gkey', None)
+                        data_copy.pop('serialno', None)
+                        data_copy['f2type'] = 'SA'
+                        current_max += 1
+                        ser = Sa001Serializer(data=data_copy)
+                        ser.is_valid(raise_exception=True)
+                        inst = ser.save(f2type='SA', serialno=current_max)
+                    elif gkey:
+                        inst = Ba001.objects.get(gkey=gkey, f2type='SA')
+                        data_copy['f2type'] = 'SA'
+                        ser = Sa001Serializer(inst, data=data_copy, partial=True)
+                        ser.is_valid(raise_exception=True)
+                        inst = ser.save()
+                    else:
+                        data_copy['f2type'] = 'SA'
+                        current_max += 1
+                        ser = Sa001Serializer(data=data_copy)
+                        ser.is_valid(raise_exception=True)
+                        inst = ser.save(f2type='SA', serialno=current_max)
+
+                    upserted_instances.append(inst)
+
+                upserted_records = Sa001Serializer(upserted_instances, many=True).data
+
+            return Response({
+                'success': True,
+                'message': '業務片語存檔成功',
+                'upserted_records': upserted_records
+            })
+        except Exception as e:
+            return Response({'success': False, 'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class Sa006ViewSet(BaseDictionaryViewSet):
+    """
+    sa006 其他費用設定
+    訂單 (sa030) / 預告訂單 (sa020) 附加費用項目與公式設定。
+    """
+    program_id = 'w_sa006'
+    queryset = Sa006.objects.all()
+    serializer_class = Sa006Serializer
+
+
+class Sa007ViewSet(BaseDictionaryViewSet):
+    """
+    sa007 報價其他費用設定
+    報價單 (sa010) 所屬其他附加費用項目設定。
+    """
+    program_id = 'w_sa007'
+    queryset = Sa007.objects.all()
+    serializer_class = Sa007Serializer
+
+
+class Sa005ViewSet(BaseDictionaryViewSet):
+    """
+    sa005 Assortment 尺碼配比設定
+    訂單裝筱配比設定，包含 22 個尺碼的雙數展開。
+    """
+    program_id = 'w_sa005'
+    queryset = Sa005.objects.all()
+    serializer_class = Sa005Serializer
+
+
+class SysMenuViewSet(BaseDictionaryViewSet):
+    """系統選單維護 ViewSet (SS001)"""
+    program_id = 'w_ss001'
+    queryset = SysMenu.objects.all()
+    serializer_class = SysMenuSerializer
+
+    @action(detail=True, methods=['post'], url_path='delete-node')
+    def delete_node(self, request, pk=None):
+        node = self.get_object()
+        
+        # 1. 檢查子節點是否存在
+        if SysMenu.objects.filter(parent_code=node.prg_code).exists():
+            return Response(
+                {"detail": "請先刪除下級節點！"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # 2. 進行事務性級聯刪除
+        with transaction.atomic():
+            if node.obj_name:
+                SysMenuColumn.objects.filter(obj_name=node.obj_name).delete()
+            node.delete()
+            
+        return Response({"detail": "節點及其級聯翻譯刪除成功。"}, status=status.HTTP_200_OK)
+
+
+class SysPopedomDescViewSet(BaseDictionaryViewSet):
+    """權限描述說明維護 ViewSet (SS001)"""
+    program_id = 'w_ss001'
+    queryset = SysPopedomDesc.objects.all()
+    serializer_class = SysPopedomDescSerializer
+
+    def get_queryset(self):
+        queryset = SysPopedomDesc.objects.all()
+        obj_name = self.request.query_params.get('obj_name')
+        hisystem = self.request.query_params.get('hisystem')
+        if obj_name is not None:
+            queryset = queryset.filter(obj_name=obj_name)
+        if hisystem is not None:
+            queryset = queryset.filter(hisystem=hisystem)
+        return queryset
+
+
+class SysMenuColumnViewSet(BaseDictionaryViewSet):
+    """選單欄位翻譯維護 ViewSet (SS001)"""
+    program_id = 'w_ss001'
+    queryset = SysMenuColumn.objects.all()
+    serializer_class = SysMenuColumnSerializer
+
+    def get_queryset(self):
+        queryset = SysMenuColumn.objects.all()
+        obj_name = self.request.query_params.get('obj_name')
+        hisystem = self.request.query_params.get('hisystem')
+        if obj_name is not None:
+            queryset = queryset.filter(obj_name=obj_name)
+        if hisystem is not None:
+            queryset = queryset.filter(hisystem=hisystem)
+        return queryset
 
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_permission_matrix(request):
+    """
+    GET /api/auth/permission-matrix/?target_id=...&is_group=false&hisystem=01
+    供 C1-3C 前端 Matrix 讀取資料。
+    """
+    target_id = request.query_params.get('target_id')
+    is_group_str = request.query_params.get('is_group')
+    hisystem = request.query_params.get('hisystem')
+    
+    if not target_id or is_group_str is None or not hisystem:
+        return Response({"detail": "請提供 target_id、is_group 與 hisystem 參數。"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    is_group = str(is_group_str).lower() in ('true', '1')
+    
+    try:
+        matrix_data = PermissionMatrixService.get_permission_matrix(target_id, is_group, hisystem)
+        return Response(matrix_data)
+    except serializers.ValidationError as e:
+        return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_save_permissions(request):
+    """
+    POST /api/auth/save-permissions/
+    批次儲存使用者或群組權限。
+    """
+    serializer = SavePermissionsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    
+    try:
+        PermissionMatrixService.save_permissions(
+            target_id=data['target_id'],
+            is_group=data['is_group'],
+            hisystem=data['hisystem'],
+            permissions=data['permissions']
+        )
+        return Response({
+            "success": True,
+            "should_refresh_permissions": True,
+            "message": "權限儲存成功。"
+        })
+    except serializers.ValidationError as e:
+        return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_copy_permissions(request):
+    """
+    POST /api/auth/copy-permissions/
+    複製來源 user/group 權限到目標 user/group。
+    """
+    serializer = CopyPermissionsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    
+    try:
+        PermissionMatrixService.copy_permissions(
+            source_id=data['source_id'],
+            is_source_group=data['is_source_group'],
+            target_id=data['target_id'],
+            is_target_group=data['is_target_group'],
+            hisystem=data['hisystem']
+        )
+        return Response({
+            "success": True,
+            "should_refresh_permissions": True,
+            "message": "權限複製成功。"
+        })
+    except serializers.ValidationError as e:
+        return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasSy005Permission])
+def auth_apply_group_permissions(request):
+    """
+    POST /api/auth/apply-group-permissions/
+    將使用者所屬群組權限 OR 合併後寫入使用者權限。
+    """
+    serializer = ApplyGroupPermissionsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    
+    try:
+        PermissionMatrixService.apply_group_permissions(
+            accounts_id=data['accounts_id'],
+            hisystem=data['hisystem']
+        )
+        return Response({
+            "success": True,
+            "should_refresh_permissions": True,
+            "message": "群組權限套用成功。"
+        })
+    except serializers.ValidationError as e:
+        return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 

@@ -604,9 +604,45 @@ def ensure_mr035_table():
             )
         """)
 
+def ensure_sys_accounts_table():
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sys_accounts (
+                gkey VARCHAR(20) PRIMARY KEY,
+                hisystem VARCHAR(10),
+                accounts_id VARCHAR(50) UNIQUE,
+                user_id VARCHAR(20) UNIQUE,
+                accounts VARCHAR(50),
+                user_pwd VARCHAR(50),
+                peopdom_class VARCHAR(10),
+                create_date TIMESTAMP,
+                status_sign VARCHAR(1)
+            )
+        """)
+
+def authenticate_test_user(client):
+    from django.contrib.auth.models import User
+    from api.models import SysAccount
+    ensure_sys_accounts_table()
+    django_user, _ = User.objects.get_or_create(username='ADMIN')
+    SysAccount.objects.get_or_create(
+        accounts_id='ADMIN',
+        defaults={
+            'gkey': 'admin_gkey',
+            'hisystem': '01',
+            'user_id': 'user_admin',
+            'accounts': 'Admin User',
+            'user_pwd': 'pwd',
+            'peopdom_class': '5',
+            'status_sign': '0'
+        }
+    )
+    client.force_authenticate(user=django_user)
+
 class Mr015ViewSetTests(APITestCase):
     def setUp(self):
         ensure_mr035_table()
+        authenticate_test_user(self.client)
         self.mr015_url = reverse('mr015-list')
         self.bulk_save_url = reverse('mr015-bulk-save')
 
@@ -675,6 +711,7 @@ class Mr015ViewSetTests(APITestCase):
 class Mr016ViewSetTests(APITestCase):
     def setUp(self):
         ensure_mr035_table()
+        authenticate_test_user(self.client)
         self.master = Mr015.objects.create(matno='M15_DETAIL', cname='Master', serialno=1)
         self.mr016_url = reverse('mr016-list')
         self.bulk_save_url = reverse('mr016-bulk-save')
@@ -760,6 +797,7 @@ class Mr016ViewSetTests(APITestCase):
 class Mr030ViewSetTests(APITestCase):
     def setUp(self):
         ensure_mr035_table()
+        authenticate_test_user(self.client)
         self.mr030_url = reverse('mr030-list')
         self.bulk_save_url = reverse('mr030-bulk-save')
 

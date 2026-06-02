@@ -50,8 +50,27 @@ export function AuthProvider({ children }) {
 
       setUser(userData);
       setToken(activeToken);
-      setPermissions(permRes.data || {});
-      setMenuData(menuRes.data || []);
+
+      const permPayload = permRes.data;
+      const normalizedPerms = permPayload && typeof permPayload === 'object'
+        ? (permPayload.data && typeof permPayload.data === 'object' && !Array.isArray(permPayload.data)
+            ? permPayload.data
+            : permPayload.results && typeof permPayload.results === 'object' && !Array.isArray(permPayload.results)
+              ? permPayload.results
+              : permPayload)
+        : {};
+      setPermissions(normalizedPerms);
+
+      const menuPayload = menuRes.data;
+      const normalizedMenu = Array.isArray(menuPayload)
+        ? menuPayload
+        : Array.isArray(menuPayload?.results)
+          ? menuPayload.results
+          : Array.isArray(menuPayload?.data)
+            ? menuPayload.data
+            : [];
+      setMenuData(normalizedMenu);
+
       setIsAuthenticated(true);
     } catch (err) {
       console.error('Failed to reload auth state:', err);
@@ -78,6 +97,31 @@ export function AuthProvider({ children }) {
     }
   }, [reloadAuth]);
 
+  // Axios response interceptor to handle 401 unauthorized (e.g. active session kicked)
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const isLoginRequest = error.config && error.config.url && error.config.url.includes('/api/auth/login/');
+        if (error.response && error.response.status === 401 && !isLoginRequest) {
+          console.warn('API returned 401 Unauthorized. Session expired or kicked out. Clearing auth state.');
+          localStorage.removeItem(TOKEN_KEY);
+          setAuthToken(null);
+          setUser(null);
+          setToken(null);
+          setPermissions({});
+          setMenuData([]);
+          setIsAuthenticated(false);
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
+
   // Login handler
   const login = async (username, password) => {
     setLoginError(null);
@@ -102,8 +146,26 @@ export function AuthProvider({ children }) {
           axios.get(`${API_BASE}/auth/permissions/`),
           axios.get(`${API_BASE}/auth/menu/`),
         ]);
-        setPermissions(permRes.data || {});
-        setMenuData(menuRes.data || []);
+
+        const permPayload = permRes.data;
+        const normalizedPerms = permPayload && typeof permPayload === 'object'
+          ? (permPayload.data && typeof permPayload.data === 'object' && !Array.isArray(permPayload.data)
+              ? permPayload.data
+              : permPayload.results && typeof permPayload.results === 'object' && !Array.isArray(permPayload.results)
+                ? permPayload.results
+                : permPayload)
+          : {};
+        setPermissions(normalizedPerms);
+
+        const menuPayload = menuRes.data;
+        const normalizedMenu = Array.isArray(menuPayload)
+          ? menuPayload
+          : Array.isArray(menuPayload?.results)
+            ? menuPayload.results
+            : Array.isArray(menuPayload?.data)
+              ? menuPayload.data
+              : [];
+        setMenuData(normalizedMenu);
       } catch (loadErr) {
         console.error('Failed to load permissions/menu after login:', loadErr);
       }
@@ -139,8 +201,8 @@ export function AuthProvider({ children }) {
 
   // Check permission helper bound to AuthContext
   const hasPermission = useCallback((programId, action) => {
-    return checkPermission(permissions, programId, action);
-  }, [permissions]);
+    return checkPermission(permissions, programId, action, user);
+  }, [permissions, user]);
 
   const value = {
     user,

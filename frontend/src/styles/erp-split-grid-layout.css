@@ -1,0 +1,129 @@
+/* Shared Split Grid Layout Styles */
+
+.erp-split-layout-container {
+  display: flex;
+  width: 100%;
+  height: calc(100vh - 120px); /* Fill the viewport height */
+  min-height: 550px;
+  background-color: var(--card-bg, #ffffff);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  position: relative;
+  border: 1px solid #e5e7eb;
+}
+
+.erp-split-left-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.erp-split-resizer {
+  width: 8px;
+  cursor: col-resize;
+  background-color: #f3f4f6;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+  position: relative;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.erp-split-resizer:hover,
+.erp-split-resizer.is-dragging {
+  background-color: #3b82f6;
+  border-color: #2563eb;
+}
+
+.erp-split-resizer::after {
+  content: " ";
+  width: 2px;
+  height: 24px;
+  background-color: #d1d5db;
+  border-radius: 1px;
+  transition: background-color 0.2s ease;
+}
+
+.erp-split-resizer:hover::after,
+.erp-split-resizer.is-dragging::after {
+  background-color: #ffffff;
+}
+
+.erp-split-right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.erp-split-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  padding: 10px 16px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.erp-split-grid-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.erp-split-grid-wrapper.is-focused {
+  border-color: #3b82f6; /* Modern Blue focus indicator */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.erp-split-grid-header {
+  padding: 8px 12px;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.erp-split-grid-header .focus-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background-color: #e5e7eb;
+  color: #4b5563;
+  text-transform: uppercase;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.erp-split-grid-wrapper.is-focused .erp-split-grid-header {
+  background-color: #eff6ff;
+  color: #1e3a8a;
+  border-bottom-color: #bfdbfe;
+}
+
+.erp-split-grid-wrapper.is-focused .focus-badge {
+  background-color: #3b82f6;
+  color: #ffffff;
+}

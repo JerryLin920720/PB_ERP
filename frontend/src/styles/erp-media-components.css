@@ -1,0 +1,90 @@
+/* modern and premium media styling for ERP images & files */
+
+.erp-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--placeholder-bg, #f3f4f6);
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.erp-image-placeholder-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(243, 244, 246, 0.7);
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.erp-image-preview-wrapper {
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.erp-image-preview-wrapper:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.erp-image-upload-field {
+  display: inline-flex;
+  align-items: center;
+}
+
+.erp-image-upload-preview-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9fafb;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.erp-image-upload-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-file-field {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.erp-file-preview-container {
+  display: flex;
+  align-items: center;
+  background: #f9fafb;
+  padding: 4px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  max-width: 250px;
+}
+
+.erp-file-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.erp-file-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}

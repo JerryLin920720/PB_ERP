@@ -2,6 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { message, Modal } from 'antd';
 import './Win32DataWindow.css';
+import ERPImagePreview from './erp/shared/ERPImagePreview';
+import ERPImageUploadField from './erp/shared/ERPImageUploadField';
+import useAuth from '../auth/useAuth';
+import { canExecuteCommand } from '../auth/permissionUtils';
 
 /**
  * Normalize API response content to extract list rows
@@ -13,12 +17,31 @@ const normalizeListResponse = (responseData) => {
   return null;
 };
 
-/**
- * Helper to construct detail resource URL
- */
 const buildDetailUrl = (baseUrl, gkey) => {
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return `${normalizedBase}${gkey}/`;
+  let baseApiUrl = baseUrl;
+  let queryParams = '';
+  const qIndex = baseUrl.indexOf('?');
+  if (qIndex >= 0) {
+    baseApiUrl = baseUrl.substring(0, qIndex);
+    queryParams = baseUrl.substring(qIndex);
+  }
+  const normalizedBase = baseApiUrl.endsWith('/') ? baseApiUrl : `${baseApiUrl}/`;
+  return `${normalizedBase}${gkey}/${queryParams}`;
+};
+
+/**
+ * Helper to construct bulk save URL safely preserving query parameters
+ */
+const buildBulkSaveUrl = (apiUrl) => {
+  let baseApiUrl = apiUrl;
+  let queryParams = '';
+  const qIndex = apiUrl.indexOf('?');
+  if (qIndex >= 0) {
+    baseApiUrl = apiUrl.substring(0, qIndex);
+    queryParams = apiUrl.substring(qIndex);
+  }
+  const normalizedBase = baseApiUrl.endsWith('/') ? baseApiUrl : `${baseApiUrl}/`;
+  return `${normalizedBase}bulk_save/${queryParams}`;
 };
 
 const getDeleteDisplayText = (row, columns = []) => {
@@ -206,7 +229,24 @@ const getOptionLabel = (col, value) => {
  * 2. 選中列之所有可編輯欄位「全自動顯化輸入格」，點擊即打字，解決雙格輸入困惑。
  * 3. 使用函數式狀態更新，杜絕全域閉包異步副作用。
  */
-export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
+export default function Win32DataWindow({
+  columns,
+  apiUrl,
+  title,
+  sheetId,
+  permissionKey,
+  onRowSelect,
+  onBeforeInsert,
+  defaultValues,
+  debugSelectedMaster,
+  sequenceField,
+  autoRenumber,
+  sequenceScopeField,
+  sequenceScopeValue,
+  onDirtyStateChange,
+  onFetchSuccess
+}) {
+  const { user, permissions } = useAuth();
   const [rows, setRows] = useState([]);
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
   const [editingRowIndex, setEditingRowIndex] = useState(-1); // 🔒 專屬編輯列索引，預設 -1 (唯讀模式)
@@ -216,6 +256,25 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
   const [deleteSet, setDeleteSet] = useState(new Set()); 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('就緒');
+
+  // Trigger row selection callback backward-compatibly
+  const onRowSelectRef = useRef(onRowSelect);
+  useEffect(() => {
+    onRowSelectRef.current = onRowSelect;
+  }, [onRowSelect]);
+
+  useEffect(() => {
+    if (onRowSelectRef.current) {
+      onRowSelectRef.current(rows[selectedRowIndex] || null);
+    }
+  }, [selectedRowIndex, rows]);
+
+  const isDirty = Object.keys(dirtyMap).length > 0 || deleteSet.size > 0;
+  useEffect(() => {
+    if (onDirtyStateChange) {
+      onDirtyStateChange(isDirty);
+    }
+  }, [isDirty, onDirtyStateChange]);
 
   // 📥 檢索 (Retrieve)
   const fetchRows = async () => {
@@ -239,8 +298,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
 
       console.log(`[Win32DataWindow] fetchRows resolved rows count: ${normalized.length}`);
 
-      // 依照 SerialNo 排序
-      const sortedData = normalized.sort((a, b) => Number(a.serialno || 0) - Number(b.serialno || 0));
+      // 依照 sequenceField 排序 (預設為 serialno)
+      const seqCol = sequenceField || 'serialno';
+      const sortedData = normalized.sort((a, b) => Number(a[seqCol] || 0) - Number(b[seqCol] || 0));
       
       setRows(sortedData);
       setDirtyMap({});
@@ -248,6 +308,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
       setSelectedRowIndex(sortedData.length > 0 ? 0 : -1);
       setEditingRowIndex(-1); // 重置為查詢模式
       setStatusMsg(`讀取完成。共 ${sortedData.length} 筆資料。`);
+      if (onFetchSuccess) {
+        onFetchSuccess(sortedData);
+      }
     } catch (err) {
       console.error('[Win32DataWindow] fetchRows Error:', err);
       setStatusMsg(`錯誤: ${err.response?.data?.detail || err.message}`);
@@ -257,19 +320,78 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
   };
 
   // ➕ 新增 (Insert Row)
+  const renumberRows = (targetRows) => {
+    if (!autoRenumber || !sequenceField) return targetRows;
+
+    if (!sequenceScopeField || sequenceScopeValue === undefined || sequenceScopeValue === null) {
+      return targetRows.map((row, index) => ({
+        ...row,
+        [sequenceField]: index + 1,
+      }));
+    }
+
+    let scopedIndex = 1;
+    return targetRows.map(row => {
+      if (String(row[sequenceScopeField] || '') !== String(sequenceScopeValue)) {
+        return row;
+      }
+      return {
+        ...row,
+        [sequenceField]: scopedIndex++,
+      };
+    });
+  };
+
+  // ➕ 新增 (Insert Row)
   const handleInsert = () => {
+    if (onBeforeInsert) {
+      const proceed = onBeforeInsert();
+      if (!proceed) return;
+    }
+
     const tempGkey = `temp_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     
-    // 建立初始預設值對象，包含所有可編輯欄位
-    const newRow = {
-      gkey: tempGkey,
-      serialno: '(自動)'
+    // Resolve default values
+    const resolvedDefaultValues =
+      typeof defaultValues === 'function'
+        ? defaultValues()
+        : (defaultValues || {});
+
+    // Create empty row with all editable columns defaulting to ''
+    const emptyRow = {
+      gkey: tempGkey
     };
     columns.forEach(col => {
       if (col.editable) {
-        newRow[col.key] = '';
+        emptyRow[col.key] = '';
       }
     });
+
+    const newRow = {
+      ...emptyRow,
+      ...resolvedDefaultValues,
+      gkey: tempGkey, // Ensure gkey is always tempGkey
+      _isNew: true
+    };
+
+    if (sequenceField) {
+      const currentScopeVal = sequenceScopeValue !== undefined ? sequenceScopeValue : newRow[sequenceScopeField];
+      const scopedRows = sequenceScopeField && currentScopeVal !== undefined
+        ? rows.filter(row => String(row[sequenceScopeField] || '') === String(currentScopeVal))
+        : rows;
+
+      const maxSerial = scopedRows.reduce((max, row) => {
+        const value = Number(row[sequenceField]);
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+      }, 0);
+
+      newRow[sequenceField] = maxSerial + 1;
+    } else {
+      newRow.serialno = '(自動)';
+    }
+
+    console.log('[MR015 DETAIL INSERT] selectedMaster:', debugSelectedMaster || null);
+    console.log('[MR015 DETAIL INSERT] newRow:', newRow);
 
     setRows(prev => {
       const next = [...prev, newRow];
@@ -308,23 +430,20 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     // 若選到的是 temp_ 開頭的新資料，直接從前端 rows 移除，不需要打 API。
     if (typeof gkey === 'string' && gkey.startsWith('temp_')) {
       const remaining = rows.filter(row => row.gkey !== gkey);
-      const hasSerialNo = columns.some(col => col.key === 'serialno');
+      const renumbered = renumberRows(remaining);
       
-      let finalRows = remaining;
       let nextDirty = { ...dirtyMap };
       delete nextDirty[gkey];
       
-      if (hasSerialNo) {
-        finalRows = remaining.map((row, idx) => {
-          const newSn = idx + 1;
-          if (row.serialno !== '(自動)' && Number(row.serialno) !== newSn) {
-            const updatedRow = { ...row, serialno: newSn };
-            nextDirty[row.gkey] = updatedRow;
-            return updatedRow;
-          }
-          return row;
-        });
-      }
+      const finalRows = renumbered.map(row => {
+        const originalRow = remaining.find(r => r.gkey === row.gkey);
+        if (originalRow && sequenceField && originalRow[sequenceField] !== row[sequenceField]) {
+          const updatedRow = { ...row };
+          nextDirty[row.gkey] = updatedRow;
+          return updatedRow;
+        }
+        return row;
+      });
       
       setRows(finalRows);
       setDirtyMap(nextDirty);
@@ -346,35 +465,34 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
           const deleteUrl = buildDetailUrl(apiUrl, gkey);
           await axios.delete(deleteUrl);
           
-          // 重新排序並儲存剩餘的資料列
-          const remainingRows = rows.filter(row => row.gkey !== gkey);
-          const hasSerialNo = columns.some(col => col.key === 'serialno');
-          const upsertList = [];
-          
-          remainingRows.forEach((row, idx) => {
-            const newSn = idx + 1;
-            const isDirty = !!dirtyMap[row.gkey];
-            const snChanged = row.serialno !== '(自動)' && Number(row.serialno) !== newSn;
-            
-            if (isDirty || snChanged) {
-              const baseRow = dirtyMap[row.gkey] || row;
-              upsertList.push({
-                ...baseRow,
-                serialno: row.serialno === '(自動)' ? '(自動)' : newSn
-              });
-            }
+          setDirtyMap(prev => {
+            const next = { ...prev };
+            delete next[gkey];
+            return next;
           });
-          
-          // 如果沒有 serialno 欄位，但有其他欄位在 dirtyMap 中，也一起儲存以防 fetchRows 刷新丟失
-          if (!hasSerialNo) {
-            const remainingDirty = Object.values(dirtyMap).filter(item => item.gkey !== gkey);
-            if (remainingDirty.length > 0) {
-              upsertList.push(...remainingDirty);
-            }
+
+          // 重新排序並儲存剩餘的資料列 (如果 autoRenumber 開啟且有 sequenceField)
+          let upsertList = [];
+          if (autoRenumber && sequenceField) {
+            const remainingRows = rows.filter(row => row.gkey !== gkey);
+            const renumbered = renumberRows(remainingRows);
+            
+            renumbered.forEach(row => {
+              const originalRow = remainingRows.find(r => r.gkey === row.gkey);
+              const snChanged = originalRow && originalRow[sequenceField] !== row[sequenceField];
+              
+              if (snChanged) {
+                // 💡 最小 Payload 化：僅傳送 gkey 與變更後的排序序號，不要發送其他髒資料或無關欄位以防 validation 失敗
+                upsertList.push({
+                  gkey: row.gkey,
+                  [sequenceField]: row[sequenceField]
+                });
+              }
+            });
           }
           
           if (upsertList.length > 0) {
-            const bulkApiUrl = apiUrl.endsWith('/') ? `${apiUrl}bulk_save/` : `${apiUrl}/bulk_save/`;
+            const bulkApiUrl = buildBulkSaveUrl(apiUrl);
             await axios.post(bulkApiUrl, {
               upsert: upsertList,
               delete: []
@@ -405,15 +523,94 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     const currentDirtyMap = opsRef.current.dirtyMap || {};
     const currentDeleteSet = opsRef.current.deleteSet || new Set();
 
-    let upsertList = Object.values(currentDirtyMap);
+    // Print save before log as requested by user
+    console.log('[MR015 DETAIL SAVE BEFORE]', {
+      sheetId,
+      rows,
+      dirtyMap: currentDirtyMap,
+      selectedMaster: opsRef.current.selectedMaster || null,
+    });
+
+    // Merge actual row data as base and overwrite with dirtyMap modifications,
+    // filtering out any completely empty new rows.
+    const upsertList = rows
+      .filter(row => row._isNew || currentDirtyMap[row.gkey])
+      .filter(row => {
+        if (row._isNew) {
+          const actualFields = columns.filter(col => !col.hidden && col.key !== 'serialno' && col.key !== 'gkey');
+          const isBlank = actualFields.every(col => {
+            const val = currentDirtyMap[row.gkey]?.[col.key] !== undefined
+              ? currentDirtyMap[row.gkey][col.key]
+              : row[col.key];
+            return !val || String(val).trim() === '';
+          });
+          if (isBlank) {
+            console.log('[Win32DataWindow] Filtering out blank new row:', row.gkey);
+            return false;
+          }
+        }
+        return true;
+      })
+      .map(row => {
+        return {
+          ...row,
+          ...(currentDirtyMap[row.gkey] || {})
+        };
+      });
+
+    // 🔒 欄位驗證 (Required & Range validation)
+    for (const row of upsertList) {
+      for (const col of columns) {
+        const val = row[col.key];
+        
+        // 必填檢查
+        if (col.required) {
+          if (val === undefined || val === null || String(val).trim() === '') {
+            message.error(`【${title}】的欄位「${col.label}」不可為空白！`);
+            setLoading(false);
+            setStatusMsg('驗證失敗');
+            return;
+          }
+        }
+        
+        // 數值範圍檢查
+        if (val !== undefined && val !== null && val !== '') {
+          if (col.min !== undefined || col.max !== undefined) {
+            const numVal = Number(val);
+            if (isNaN(numVal)) {
+              message.error(`【${title}】的欄位「${col.label}」必須為有效數字！`);
+              setLoading(false);
+              setStatusMsg('驗證失敗');
+              return;
+            }
+            if (col.min !== undefined && numVal < col.min) {
+              message.error(`【${title}】的欄位「${col.label}」值不能小於 ${col.min}！`);
+              setLoading(false);
+              setStatusMsg('驗證失敗');
+              return;
+            }
+            if (col.max !== undefined && numVal > col.max) {
+              message.error(`【${title}】的欄位「${col.label}」值不能大於 ${col.max}！`);
+              setLoading(false);
+              setStatusMsg('驗證失敗');
+              return;
+            }
+          }
+        }
+      }
+    }
+
     let deleteList = Array.from(currentDeleteSet);
 
-    const bulkApiUrl = apiUrl.endsWith('/') ? `${apiUrl}bulk_save/` : `${apiUrl}/bulk_save/`;
+    const bulkApiUrl = buildBulkSaveUrl(apiUrl);
     const payload = {
       upsert: upsertList,
       delete: deleteList
     };
 
+    console.log(`[SAVE PAYLOAD DEBUG] sheetId: ${sheetId}, url: ${bulkApiUrl}`);
+    console.log('[SAVE PAYLOAD DEBUG] payload:', JSON.stringify(payload, null, 2));
+    console.log('[MR015 DETAIL SAVE PAYLOAD]', JSON.stringify(payload, null, 2));
     console.log('[Win32DataWindow] saving to:', bulkApiUrl);
     console.log('[Win32DataWindow] payload:', payload);
     console.log('[Win32DataWindow] upsertList.length:', upsertList.length);
@@ -447,28 +644,30 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
 
   // ⚙️ 即時儲存格變更 (Immediate Inline Value Committer)
   const handleCellChange = (rIndex, colKey, newVal) => {
-    // 1. 同步更新 rows
-    setRows(prev => {
-      const next = [...prev];
-      const row = next[rIndex];
-      if (!row) return prev;
+    setRows(prevRows => {
+      if (rIndex < 0 || rIndex >= prevRows.length) return prevRows;
+      const nextRows = [...prevRows];
+      const targetRow = nextRows[rIndex];
+      const updatedRow = { ...targetRow, [colKey]: newVal };
+      nextRows[rIndex] = updatedRow;
       
-      const updatedRow = { ...row, [colKey]: newVal };
-      next[rIndex] = updatedRow;
-      return next;
-    });
-    
-    // 2. 在 setRows 外部執行 setDirtyMap 更新以防 React State updater 副作用被丟失
-    setRows(prev => {
-      const row = prev[rIndex];
-      if (row) {
-        const updatedRow = { ...row, [colKey]: newVal };
-        setDirtyMap(prevDirty => ({
-          ...prevDirty,
-          [row.gkey]: updatedRow
-        }));
-      }
-      return prev;
+      // Update dirtyMap with the fully updated row in a single pass
+      setDirtyMap(prevDirty => ({
+        ...prevDirty,
+        [targetRow.gkey]: updatedRow
+      }));
+      
+      // Print cell change log for debugging as requested by the user
+      console.log('[MR015 DETAIL CELL CHANGE]', {
+        sheetId,
+        rowKey: targetRow.gkey,
+        columnKey: colKey,
+        value: newVal,
+        beforeRow: targetRow,
+        afterRow: updatedRow,
+      });
+
+      return nextRows;
     });
   };
 
@@ -482,7 +681,8 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
       fetchRows,
       selectedRowIndex,
       dirtyMap,
-      deleteSet
+      deleteSet,
+      selectedMaster: debugSelectedMaster
     };
   });
 
@@ -493,6 +693,14 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
       
       if (targetSheet === sheetId) {
         console.log(`⚡ [${sheetId}] Intercepted command: ${action}`);
+        
+        // 🔒 權限二次檢查 (Win32DataWindow Global Command Guard)
+        const checkKey = permissionKey || sheetId;
+        if (!canExecuteCommand(permissions, checkKey, action, user)) {
+          message.error(`您無權在此作業執行 [${action}] 操作！`);
+          return;
+        }
+        
         const ops = opsRef.current;
         if (action === 'retrieve') ops.fetchRows();
         else if (action === 'edit') setEditingRowIndex(ops.selectedRowIndex); // 解開目前選取列編輯鎖
@@ -509,7 +717,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
     return () => {
       window.removeEventListener('mdi-global-command', handleGlobalCommand);
     };
-  }, [sheetId]);
+  }, [sheetId, permissionKey, permissions, user]);
 
   useEffect(() => {
     fetchRows();
@@ -524,8 +732,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
           <thead>
             <tr>
               <th className="dw-th" style={{ width: '30px', textAlign: 'center' }}></th>
-              {columns.map(col => (
+              {columns.filter(col => !col.hidden).map(col => (
                 <th key={col.key} className="dw-th" style={{ width: col.width || 'auto' }}>
+                  {col.required && <span style={{ color: '#ff4d4f', marginRight: '4px' }}>*</span>}
                   {col.label}
                 </th>
               ))}
@@ -549,7 +758,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
                     {isSelected ? '▶' : (isRowDirty ? '*' : '')}
                   </td>
 
-                  {columns.map(col => {
+                  {columns.filter(col => !col.hidden).map(col => {
                     // 核心唯讀控制邏輯：僅在點擊編輯或雙擊解鎖時，才顯化輸入格，其餘欄位純文字渲染防誤改
                     const showInput = rIndex === editingRowIndex && col.editable && !isDeleted;
 
@@ -571,6 +780,11 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
                             </select>
+                          ) : col.type === 'image' ? (
+                            <ERPImageUploadField
+                              value={row[col.key] === undefined || row[col.key] === null ? '' : row[col.key]}
+                              onChange={(newVal) => handleCellChange(rIndex, col.key, newVal)}
+                            />
                           ) : (
                             <input
                               className="dw-cell-input-modern"
@@ -581,7 +795,9 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
                           )
                         ) : (
                           <span style={{ opacity: isDeleted ? 0.4 : 1 }}>
-                            {col.displayKey && row[col.displayKey] !== undefined && row[col.displayKey] !== null
+                            {col.type === 'image' ? (
+                              <ERPImagePreview src={row[col.key]} />
+                            ) : col.displayKey && row[col.displayKey] !== undefined && row[col.displayKey] !== null
                               ? String(row[col.displayKey])
                               : (col.options 
                                   ? getOptionLabel(col, row[col.key]) 
@@ -596,7 +812,7 @@ export default function Win32DataWindow({ columns, apiUrl, title, sheetId }) {
             })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={columns.length + 1} style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                <td colSpan={columns.filter(col => !col.hidden).length + 1} style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                   目前尚無資料。請點擊頂部工具列「查詢」載入，或點擊「增行」開始新增。
                 </td>
               </tr>

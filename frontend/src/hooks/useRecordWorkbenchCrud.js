@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { message, Modal } from 'antd';
+import useAuth from '../auth/useAuth';
+import { canExecuteCommand } from '../auth/permissionUtils';
 
 /**
  * Helper to resolve absolute API urls.
@@ -150,6 +152,7 @@ export default function useRecordWorkbenchCrud({
   afterSave,
   form, // AntD form instance passed from UI
 }) {
+  const { user, permissions } = useAuth();
   const [mode, setMode] = useState('list'); // 'list' | 'edit'
   const [loading, setLoading] = useState(false);
 
@@ -717,6 +720,11 @@ export default function useRecordWorkbenchCrud({
     const handleGlobalCommand = (e) => {
       const { action, targetSheet } = e.detail;
       if (targetSheet === sheetId) {
+        // 二次權限防呆
+        if (!canExecuteCommand(permissions, sheetId, action, user)) {
+          message.error(`您無權在此作業執行 [${action}] 操作！`);
+          return;
+        }
         if (action === 'retrieve') {
           console.debug('[RecordWorkbench] command: retrieve');
           console.debug('[RecordWorkbench] retrieve triggered');

@@ -279,3 +279,132 @@ def build_menu_tree(account) -> list:
         return pruned
 
     return prune(roots)
+
+
+def model_has_field(model_or_instance, field_name) -> bool:
+    if not model_or_instance:
+        return False
+    opts = getattr(model_or_instance, '_meta', None)
+    if not opts:
+        return False
+    try:
+        opts.get_field(field_name)
+        return True
+    except Exception:
+        return False
+
+
+def get_current_sys_account(request):
+    if not request.user or not request.user.is_authenticated:
+        return None
+    account = getattr(request.user, 'sys_account', None)
+    if not account:
+        account = SysAccount.objects.filter(accounts_id__iexact=request.user.username).first()
+        if account:
+            request.user.sys_account = account
+    return account
+
+
+def get_current_es101(request):
+    account = get_current_sys_account(request)
+    if not account or not account.user_id:
+        return None
+    from api.models import Es101
+    return Es101.objects.filter(gkey=account.user_id).first()
+
+
+def get_current_es101gkey(request):
+    from django.conf import settings
+    from rest_framework.exceptions import PermissionDenied
+
+    if not request.user or not request.user.is_authenticated:
+        if getattr(settings, 'DEBUG', False):
+            dev_fallback = getattr(settings, 'DEFAULT_DEV_ES101GKEY', None)
+            if dev_fallback:
+                # TODO: Dev environment fallback to DEFAULT_DEV_ES101GKEY when user is not authenticated.
+                return dev_fallback
+        raise PermissionDenied("使用者未登入，無法取得 es101gkey。")
+
+    # 1. 優先使用 request.user.sys_account.user_id
+    sys_account = getattr(request.user, 'sys_account', None)
+    if sys_account and getattr(sys_account, 'user_id', None):
+        return sys_account.user_id
+
+    # 2. 若沒有 sys_account，使用 request.user.username 查 SysAccount.accounts_id
+    account = SysAccount.objects.filter(accounts_id__iexact=request.user.username).first()
+    if account:
+        request.user.sys_account = account
+        if account.user_id:
+            return account.user_id
+
+    # 3. 只有在 settings.DEBUG=True 且明確設定 DEFAULT_DEV_ES101GKEY 時，才允許 temporary fallback
+    if getattr(settings, 'DEBUG', False):
+        dev_fallback = getattr(settings, 'DEFAULT_DEV_ES101GKEY', None)
+        if dev_fallback:
+            # TODO: Dev environment fallback to DEFAULT_DEV_ES101GKEY.
+            # In production, this fallback is disallowed.
+            return dev_fallback
+
+    # 4. 若找不到 es101gkey，應回傳明確錯誤，不要靜默補 ADMIN
+    raise PermissionDenied("無法為當前使用者帳號找到對應的員工資訊 (es101gkey)。請聯繫系統管理員。")
+
+
+def apply_create_audit_fields(data_or_instance, request, model_cls=None):
+    from django.utils import timezone
+    account = get_current_sys_account(request)
+    username = account.accounts_id if account else (request.user.username if request.user and request.user.is_authenticated else 'ADMIN')
+    user_gkey = account.gkey if account else 'ADMIN'
+    
+    es101gkey = get_current_es101gkey(request)
+    now = timezone.now()
+
+    audit_values = {
+        'es101gkey': es101gkey,
+        'createuser': username,
+        'creategkey': user_gkey,
+        'createdate': now,
+        'modifyuser': username,
+        'modifygkey': user_gkey,
+        'modifydate': now,
+        'inputdate': now,
+        'modifier': username,
+        'modifieddate': now
+    }
+
+    if isinstance(data_or_instance, dict):
+        for field, val in audit_values.items():
+            if model_cls and not model_has_field(model_cls, field):
+                continue
+            data_or_instance[field] = val
+    else:
+        for field, val in audit_values.items():
+            if model_has_field(data_or_instance, field):
+                setattr(data_or_instance, field, val)
+    return data_or_instance
+
+
+def apply_update_audit_fields(data_or_instance, request, model_cls=None):
+    from django.utils import timezone
+    account = get_current_sys_account(request)
+    username = account.accounts_id if account else (request.user.username if request.user and request.user.is_authenticated else 'ADMIN')
+    user_gkey = account.gkey if account else 'ADMIN'
+    now = timezone.now()
+
+    audit_values = {
+        'modifyuser': username,
+        'modifygkey': user_gkey,
+        'modifydate': now,
+        'modifier': username,
+        'modifieddate': now
+    }
+
+    if isinstance(data_or_instance, dict):
+        for field, val in audit_values.items():
+            if model_cls and not model_has_field(model_cls, field):
+                continue
+            data_or_instance[field] = val
+    else:
+        for field, val in audit_values.items():
+            if model_has_field(data_or_instance, field):
+                setattr(data_or_instance, field, val)
+    return data_or_instance

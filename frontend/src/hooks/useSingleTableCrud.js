@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { message, Modal } from 'antd';
+import useAuth from '../auth/useAuth';
+import { canExecuteCommand } from '../auth/permissionUtils';
 
 /**
  * Django REST Framework (DRF) 錯誤細節解析器
@@ -128,6 +130,7 @@ export default function useSingleTableCrud({
   deleteConfirmMessage,
   form
 }) {
+  const { user, permissions } = useAuth();
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -452,6 +455,11 @@ export default function useSingleTableCrud({
     const handleGlobalCommand = (e) => {
       const { action, targetSheet } = e.detail;
       if (targetSheet === sheetId) {
+        // 二次權限防呆
+        if (!canExecuteCommand(permissions, sheetId, action, user)) {
+          message.error(`您無權在此作業執行 [${action}] 操作！`);
+          return;
+        }
         console.log(`⚡ [useSingleTableCrud] Intercepted command: ${action} for ${sheetId}`);
         if (action === 'retrieve') fetchData();
         else if (action === 'edit') setIsEditing(true);
@@ -463,7 +471,7 @@ export default function useSingleTableCrud({
     };
     window.addEventListener('mdi-global-command', handleGlobalCommand);
     return () => window.removeEventListener('mdi-global-command', handleGlobalCommand);
-  }, [rows, selectedRow, isEditing]);
+  }, [rows, selectedRow, isEditing, permissions, user]);
 
   // 初始自動載入
   useEffect(() => {

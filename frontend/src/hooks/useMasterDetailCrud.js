@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { message, Modal } from 'antd';
+import useAuth from '../auth/useAuth';
+import { canExecuteCommand } from '../auth/permissionUtils';
 
 /**
  * Helper to resolve absolute API urls.
@@ -198,6 +200,7 @@ export default function useMasterDetailCrud({
   disableDetailAddAction = false,
   saveAllOverride
 }) {
+  const { user, permissions } = useAuth();
   const [masterRows, setMasterRows] = useState([]);
   const [detailRows, setDetailRows] = useState([]);
   const [selectedMaster, setSelectedMaster] = useState(null);
@@ -897,6 +900,12 @@ export default function useMasterDetailCrud({
       const { action, targetSheet } = e.detail;
 
       if (targetSheet?.toLowerCase() === sheetId.toLowerCase()) {
+        // 二次權限防呆
+        if (!canExecuteCommand(permissions, sheetId, action, user)) {
+          message.error(`您無權在此作業執行 [${action}] 操作！`);
+          return;
+        }
+
         const ops = opsRef.current;
         console.log(`⚡ [useMasterDetailCrud] Intercepted command: ${action} for ${sheetId}`);
         

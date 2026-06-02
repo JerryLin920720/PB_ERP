@@ -39,7 +39,14 @@ class Command(BaseCommand):
                     chinesebigname VARCHAR(100),
                     chinesesimpname VARCHAR(100),
                     englishname VARCHAR(150),
-                    vietnamname VARCHAR(150)
+                    vietnamname VARCHAR(150),
+                    initflag VARCHAR(1),
+                    startqty VARCHAR(4),
+                    endqty VARCHAR(4),
+                    yearly VARCHAR(4),
+                    season VARCHAR(20),
+                    pictype VARCHAR(1),
+                    makerdf VARCHAR(1)
                 )
             """)
             # Widen columns if table already exists
@@ -53,6 +60,21 @@ class Command(BaseCommand):
             except Exception as e:
                 # ignore if columns already widened or database doesn't support ALTER in this way
                 pass
+
+            # Add new columns if table already exists but doesn't have them
+            for col_name, col_type in [
+                ('initflag', 'VARCHAR(1)'),
+                ('startqty', 'VARCHAR(4)'),
+                ('endqty', 'VARCHAR(4)'),
+                ('yearly', 'VARCHAR(4)'),
+                ('season', 'VARCHAR(20)'),
+                ('pictype', 'VARCHAR(1)'),
+                ('makerdf', 'VARCHAR(1)'),
+            ]:
+                try:
+                    cursor.execute(f"ALTER TABLE sys_menu ADD COLUMN {col_name} {col_type};")
+                except Exception:
+                    pass
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sys_popedom (
@@ -102,6 +124,7 @@ class Command(BaseCommand):
         menus_to_seed = [
             # 系統設置 (SS)
             ("SS", "", "系統設置管理系統", None, "0", 1.0, "0", "系統設置管理系統", "系统设置管理系统", "System Settings", "Thiết lập hệ thống"),
+            ("SS001", "w_ss001", "選單與權限啟用設定", "SS", "1", 1.01, "0", "選單與權限啟用設定", "选单与权限启用设定", "Menu & Permission Setup", "Thiết lập menu & quyền hạn"),
             # 基本資料 (BA)
             ("BA", "", "基本資料管理系統", None, "0", 2.0, "0", "基本資料管理系統", "基本资料管理系统", "Basic Data System", "Dữ liệu cơ bản"),
             ("BA001", "w_ba001", "個人片語字庫設定", "BA", "1", 2.01, "0", "個人片語字庫設定", "个人片语字库设定", "Personal Phrase Setup", "Từ điển cá nhân"),

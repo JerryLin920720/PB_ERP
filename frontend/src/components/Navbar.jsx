@@ -5,6 +5,7 @@ import {
   PanelLeftClose, PanelLeftOpen, RefreshCw, ArrowDownAZ, Filter
 } from 'lucide-react';
 import useAuth from '../auth/useAuth';
+import { isAdmin, inferPermissionKey } from '../auth/permissionUtils';
 import './Navbar.css';
 
 /**
@@ -17,8 +18,18 @@ export default function Navbar({
   isSidebarCollapsed,
   onToggleSidebar
 }) {
-  const { logout } = useAuth();
-  const isSheetActive = activeTabId !== 'navigation';
+  const { logout, hasPermission, user } = useAuth();
+  const isSheetActive = activeTabId !== 'navigation' && activeTabId !== 'dp_map';
+  const programId = isSheetActive ? inferPermissionKey(activeTabId) : null;
+
+  const isBtnDisabled = (action) => {
+    if (!isSheetActive) return true;
+    if (user && isAdmin(user)) return false;
+    if (action === 'save') {
+      return !(hasPermission(programId, 'new') || hasPermission(programId, 'edit'));
+    }
+    return !hasPermission(programId, action);
+  };
   
   // 🛸 菜單下拉控制狀態
   const [openMenu, setOpenMenu] = useState(null);
@@ -60,7 +71,7 @@ export default function Navbar({
         <div className="titlebar-actions">
           <span style={{ fontSize: '12px', fontWeight: '600', color: '#38bdf8' }}>PROD環境</span>
           <div style={{ width: '1px', height: '12px', backgroundColor: '#475569' }}></div>
-          <span>使用者: ADMIN (系統管理者)</span>
+          <span>使用者: {user?.display_name || user?.username || 'ADMIN'}</span>
         </div>
       </div>
 
@@ -107,21 +118,21 @@ export default function Navbar({
           <span className="menu-item" onClick={() => toggleMenu('op')}>操作(O)</span>
           {openMenu === 'op' && (
             <div className="menu-dropdown">
-              <div className="dropdown-row" onClick={() => handleMenuAction(null, 'retrieve')}>
-                <span>查詢當前頁面</span>
+              <div className="dropdown-row" onClick={() => !isBtnDisabled('search') && handleMenuAction(null, 'retrieve')}>
+                <span style={{ opacity: isBtnDisabled('search') ? 0.5 : 1 }}>查詢當前頁面</span>
                 <span className="shortcut">F3</span>
               </div>
-              <div className="dropdown-row" onClick={() => handleMenuAction(null, 'insert')}>
-                <span>新增記錄 (增行)</span>
+              <div className="dropdown-row" onClick={() => !isBtnDisabled('new') && handleMenuAction(null, 'insert')}>
+                <span style={{ opacity: isBtnDisabled('new') ? 0.5 : 1 }}>新增記錄 (增行)</span>
                 <span className="shortcut">F5</span>
               </div>
-              <div className="dropdown-row" onClick={() => handleMenuAction(null, 'delete')}>
-                <span>刪除記錄 (刪行)</span>
+              <div className="dropdown-row" onClick={() => !isBtnDisabled('delete') && handleMenuAction(null, 'delete')}>
+                <span style={{ opacity: isBtnDisabled('delete') ? 0.5 : 1 }}>刪除記錄 (刪行)</span>
                 <span className="shortcut">F6</span>
               </div>
               <div className="dropdown-divider"></div>
-              <div className="dropdown-row" onClick={() => handleMenuAction(null, 'save')}>
-                <span>儲存異動 (存檔)</span>
+              <div className="dropdown-row" onClick={() => !isBtnDisabled('save') && handleMenuAction(null, 'save')}>
+                <span style={{ opacity: isBtnDisabled('save') ? 0.5 : 1 }}>儲存異動 (存檔)</span>
                 <span className="shortcut">Ctrl+S</span>
               </div>
               <div className="dropdown-divider"></div>
@@ -191,51 +202,51 @@ export default function Navbar({
         {/* 核心物理 CRUD 操作 */}
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('search')}
           onClick={() => onDispatchCommand('retrieve')}
           title="檢索資料 (F3)"
         >
-          <div className="icon-frame"><Search size={16} color={isSheetActive ? "#ea580c" : "#94a3b8"}/></div>
+          <div className="icon-frame"><Search size={16} color={!isBtnDisabled('search') ? "#ea580c" : "#94a3b8"}/></div>
           <span className="btn-label">查詢</span>
         </button>
 
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('edit')}
           onClick={() => onDispatchCommand('edit')}
           title="開啟編輯模式 (連點兩下也可編輯)"
         >
-          <div className="icon-frame"><Edit3 size={16} color={isSheetActive ? "#2563eb" : "#94a3b8"}/></div>
+          <div className="icon-frame"><Edit3 size={16} color={!isBtnDisabled('edit') ? "#2563eb" : "#94a3b8"}/></div>
           <span className="btn-label">編輯</span>
         </button>
 
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('new')}
           onClick={() => onDispatchCommand('insert')}
           title="新增一筆空白行 (F5)"
         >
-          <div className="icon-frame"><PlusSquare size={16} color={isSheetActive ? "#16a34a" : "#94a3b8"}/></div>
+          <div className="icon-frame"><PlusSquare size={16} color={!isBtnDisabled('new') ? "#16a34a" : "#94a3b8"}/></div>
           <span className="btn-label">增行</span>
         </button>
 
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('delete')}
           onClick={() => onDispatchCommand('delete')}
           title="刪除當前行 (F6)"
         >
-          <div className="icon-frame"><Trash2 size={16} color={isSheetActive ? "#dc2626" : "#94a3b8"}/></div>
+          <div className="icon-frame"><Trash2 size={16} color={!isBtnDisabled('delete') ? "#dc2626" : "#94a3b8"}/></div>
           <span className="btn-label">刪行</span>
         </button>
 
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('save')}
           onClick={() => onDispatchCommand('save')}
           title="存檔寫入 (Ctrl+S)"
         >
-          <div className="icon-frame"><Save size={16} color={isSheetActive ? "#eab308" : "#94a3b8"}/></div>
+          <div className="icon-frame"><Save size={16} color={!isBtnDisabled('save') ? "#eab308" : "#94a3b8"}/></div>
           <span className="btn-label">儲存</span>
         </button>
 
@@ -244,11 +255,11 @@ export default function Navbar({
         {/* 🌟 新增 DataWindow 標準底層輔助物理按鈕 */}
         <button 
           className="toolbar-btn" 
-          disabled={!isSheetActive}
+          disabled={isBtnDisabled('search')}
           onClick={() => onDispatchCommand('retrieve')}
           title="重整重新整理"
         >
-          <div className="icon-frame"><RefreshCw size={16} color={isSheetActive ? "#0891b2" : "#94a3b8"}/></div>
+          <div className="icon-frame"><RefreshCw size={16} color={!isBtnDisabled('search') ? "#0891b2" : "#94a3b8"}/></div>
           <span className="btn-label">重整</span>
         </button>
 
@@ -273,18 +284,32 @@ export default function Navbar({
         <div className="toolbar-separator" />
 
         {/* 審核與輸出 */}
-        <button className="toolbar-btn" disabled={!isSheetActive} title="單據送出審核">
-          <div className="icon-frame"><CheckSquare size={16} color={isSheetActive ? "#6366f1" : "#94a3b8"}/></div>
+        <button 
+          className="toolbar-btn" 
+          disabled={isBtnDisabled('check')} 
+          onClick={() => onDispatchCommand('approve')}
+          title="單據送出審核"
+        >
+          <div className="icon-frame"><CheckSquare size={16} color={!isBtnDisabled('check') ? "#6366f1" : "#94a3b8"}/></div>
           <span className="btn-label">審核</span>
         </button>
 
-        <button className="toolbar-btn" disabled={!isSheetActive} title="匯出試算表">
-          <div className="icon-frame"><FileSpreadsheet size={16} color={isSheetActive ? "#0f766e" : "#94a3b8"}/></div>
+        <button 
+          className="toolbar-btn" 
+          disabled={isBtnDisabled('excel')} 
+          onClick={() => onDispatchCommand('export')}
+          title="匯出試算表"
+        >
+          <div className="icon-frame"><FileSpreadsheet size={16} color={!isBtnDisabled('excel') ? "#0f766e" : "#94a3b8"}/></div>
           <span className="btn-label">Excel</span>
         </button>
 
-        <button className="toolbar-btn" disabled={!isSheetActive}>
-          <div className="icon-frame"><Printer size={16} color={isSheetActive ? "#475569" : "#94a3b8"}/></div>
+        <button 
+          className="toolbar-btn" 
+          disabled={isBtnDisabled('print')}
+          onClick={() => onDispatchCommand('print')}
+        >
+          <div className="icon-frame"><Printer size={16} color={!isBtnDisabled('print') ? "#475569" : "#94a3b8"}/></div>
           <span className="btn-label">列印</span>
         </button>
 

@@ -6,6 +6,7 @@ export default createDataWindowSheet({
   breadcrumb: ['資材部門管理', '片語字庫設定'],
   apiUrl: 'http://localhost:8001/api/mr001/',
   sequenceField: 'serialno',
+  sequenceScopeField: 'f2type',
   autoRenumber: true,
   columns: [
     { key: 'serialno', label: '流水號', width: '100px', editable: false, type: 'number' },

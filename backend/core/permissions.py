@@ -115,3 +115,47 @@ class HasProgramPermission(BasePermission):
             return 'delete'
 
         return None
+
+
+class HasSy005Permission(BasePermission):
+    """
+    w_sy005 權限管理工作台專用權限類別。
+    GET 請求：需要 w_sy005 'search' 或 'edit' 權限。
+    POST 請求：需要 w_sy005 'edit' 權限。
+    """
+    def has_permission(self, request, view):
+        # 1. OPTIONS 預檢放行
+        if request.method == 'OPTIONS':
+            return True
+
+        # 2. 拒絕未登入用戶
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # 3. 獲取關聯的 SysAccount
+        account = getattr(request.user, 'sys_account', None)
+        if not account:
+            account = SysAccount.objects.filter(accounts_id__iexact=request.user.username).first()
+            if account:
+                request.user.sys_account = account
+
+        if not account:
+            return False
+
+        # 4. 管理員放行 (peopdom_class > '4')
+        if is_admin(account):
+            return True
+
+        # 5. 判斷需要 'edit' 還是 'search'
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            required_actions = ['edit']
+        else:
+            required_actions = ['search', 'edit']
+
+        # 6. 檢查權限
+        has_perm = any(
+            has_program_permission(account, 'w_sy005', act, strict_backend=True)
+            for act in required_actions
+        )
+        return has_perm
+
