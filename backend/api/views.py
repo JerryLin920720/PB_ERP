@@ -1,6 +1,6 @@
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
-from rest_framework import status, viewsets, serializers
+from rest_framework import status, viewsets, serializers, mixins
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from core.permissions import HasProgramPermission, HasSy005Permission
 from core.authz.services import get_current_es101gkey, apply_create_audit_fields, apply_update_audit_fields
@@ -22,7 +22,7 @@ from .models import (
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
     Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
     Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031, Mr035,
-    Sa006, Sa007, Sa005
+    Sa006, Sa007, Sa005, SysParameter
 )
 from .serializers import (
     Ab230Serializer, Ab231Serializer,
@@ -44,7 +44,8 @@ from .serializers import (
     PhraseSerializer, Mr002Serializer, Mr015Serializer, Mr016Serializer, Mr020Serializer, Mr025Serializer, Mr030Serializer, Mr031Serializer,
     Sa001Serializer, Sa006Serializer, Sa007Serializer, Sa005Serializer,
     SysPopedomGroupSerializer, SysAccountsGroupSerializer, SavePermissionsSerializer, CopyPermissionsSerializer, ApplyGroupPermissionsSerializer,
-    SysAccountCreateSerializer, SysAccountUpdateSerializer, SysPopedomGroupCRUDSerializer
+    SysAccountCreateSerializer, SysAccountUpdateSerializer, SysPopedomGroupCRUDSerializer,
+    SysParameterSerializer
 )
 from django.shortcuts import get_object_or_404
 
@@ -713,6 +714,50 @@ class SysAccountViewSet(viewsets.ModelViewSet):
     """系統帳號授權 ViewSet"""
     queryset = SysAccount.objects.all()
     serializer_class = SysAccountSerializer
+
+
+class SysParameterViewSet(mixins.ListModelMixin,
+                            mixins.RetrieveModelMixin,
+                            mixins.UpdateModelMixin,
+                            viewsets.GenericViewSet):
+    """
+    系統參數設定 ViewSet (僅允許 list、retrieve、update)
+    """
+    permission_classes = [HasProgramPermission]
+    program_id = 'w_sy004'
+    serializer_class = SysParameterSerializer
+    lookup_field = 'parameterid'
+
+    def get_queryset(self):
+        from django.db.models.functions import Cast
+        from django.db.models import IntegerField
+        from core.authz.services import get_current_sys_account
+
+        account = get_current_sys_account(self.request)
+        is_prvl = int(account.peopdom_class or '1') if account else 1
+
+        return SysParameter.objects.annotate(
+            visitctrl_int=Cast('visitctrl', output_field=IntegerField())
+        ).filter(visitctrl_int__lte=is_prvl).order_by('serialno')
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        parameterid = self.kwargs[lookup_url_kwarg]
+
+        hisystem = self.request.query_params.get('hisystem') or self.request.data.get('hisystem')
+        if not hisystem:
+            raise serializers.ValidationError("Missing 'hisystem' query parameter or field.")
+
+        obj = get_object_or_404(queryset, hisystem=hisystem, parameterid=parameterid)
+        self.check_object_permissions(self.request, obj)
+        return obj
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        from api.services.sys_parameter_cache import SysParameterCache
+        SysParameterCache.invalidate(instance.hisystem, instance.parameterid)
+
 
 
 class Es101ViewSet(viewsets.ModelViewSet):

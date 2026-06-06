@@ -8,6 +8,7 @@ import './Sidebar.css';
 // 系統設置管理系統
 const ssNodes = [
   { code: 'ss001', label: '選單與權限啟用設定', permissionKey: 'w_ss001' },
+  { code: 'sy004', label: '系統參數設定', permissionKey: 'w_sy004' },
   { code: 'sy005', label: '使用者與群組權限管理', permissionKey: 'w_sy005' }
 ];
 

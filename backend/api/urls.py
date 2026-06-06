@@ -40,6 +40,7 @@ router.register(r'sys_accounts', views.SysAccountViewSet, basename='sys_accounts
 router.register(r'sys-menu', views.SysMenuViewSet, basename='sys-menu')
 router.register(r'sys-popedom-desc', views.SysPopedomDescViewSet, basename='sys-popedom-desc')
 router.register(r'sys-menu-column', views.SysMenuColumnViewSet, basename='sys-menu-column')
+router.register(r'sys-parameter', views.SysParameterViewSet, basename='sys-parameter')
 router.register(r'es101', views.Es101ViewSet, basename='es101')
 router.register(r'es102', views.Es102ViewSet, basename='es102')
 router.register(r'es103', views.Es103ViewSet, basename='es103')

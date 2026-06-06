@@ -29,6 +29,7 @@ import Ba091Sheet from './v2_views/Ba091Sheet';
 import Es101V2Sheet from './v2_views/Es101V2Sheet';
 import Ba092Sheet from './v2_views/Ba092Sheet';
 import Ss001Sheet from './v2_views/Ss001Sheet';
+import Sy004Sheet from './v2_views/Sy004Sheet';
 import Sy005Sheet from './v2_views/Sy005Sheet';
 import DpFlowMap from './components/DpFlowMap';
 import Dp001Sheet from './v2_views/Dp001Sheet';
@@ -286,6 +287,8 @@ function App() {
               </div>
             ) : activeTabId === 'ss001' ? (
               <Ss001Sheet />
+            ) : activeTabId === 'sy004' ? (
+              <Sy004Sheet />
             ) : activeTabId === 'sy005' ? (
               <Sy005Sheet />
             ) : activeTabId === 'navigation' ? (
@@ -467,6 +470,7 @@ function App() {
 function getMockLabel(id) {
   const labels = {
     'ss001': '選單與權限啟用設定',
+    'sy004': '系統參數設定',
     'sy005': '使用者與群組權限管理',
     'ba001': '個人片語字庫設定',
     'ba002': '國家設定',

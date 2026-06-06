@@ -12,7 +12,8 @@ from .models import (
     Dp030, Dp031, Dp032, Dp033, Dp034, Dp035, Dp104,
     Dp040, Dp041, Dp042, Dp043, Dp080, Dp081, Dp082, Dp100, Dp101,
     Phrase, Mr002, Mr015, Mr016, Mr020, Mr025, Mr030, Mr031,
-    Sa006, Sa007, Sa005, SysPopedomGroup, SysAccountsGroup
+    Sa006, Sa007, Sa005, SysPopedomGroup, SysAccountsGroup,
+    SysParameter
 )
 
 
@@ -1277,6 +1278,38 @@ class ApplyGroupPermissionsSerializer(serializers.Serializer):
         if not SysAccount.objects.filter(accounts_id=accounts_id).exists():
             raise serializers.ValidationError({"accounts_id": f"使用者帳號 '{accounts_id}' 不存在。"})
         return data
+
+
+class SysParameterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SysParameter
+        fields = '__all__'
+        extra_kwargs = {
+            'gkey': {'required': False},
+            'serialno': {'required': False},
+        }
+
+    def validate(self, data):
+        from core.authz.services import get_current_sys_account
+        request = self.context.get('request')
+        if not request:
+            return data
+
+        instance = self.instance
+        if not instance:
+            return data
+
+        account = get_current_sys_account(request)
+        is_prvl = int(account.peopdom_class or '1') if account else 1
+
+        if is_prvl < 6:
+            for field in ['hisystem', 'parameterid', 'serialno', 'description', 'visitctrl', 'specialctrl', 'istype']:
+                if field in data and getattr(instance, field) != data[field]:
+                    raise serializers.ValidationError(
+                        f"權限不足 (is_prvl={is_prvl} < 6)：僅允許修改 parametervalue 欄位，不可修改 {field}。"
+                    )
+        return data
+
 
 
 

@@ -2363,3 +2363,78 @@ class Sa005(models.Model):
         return f"[{self.sa005_code}] {self.sa005_ctnpairs} pairs/ctn"
 
 
+class SysParameter(models.Model):
+    """
+    系統參數設定 sys_parameter
+    """
+    gkey = models.CharField(
+        primary_key=True,
+        max_length=20,
+        default=generate_pb_gkey,
+        db_column='gkey',
+        help_text='唯一物理主鍵'
+    )
+    hisystem = models.CharField(
+        max_length=10,
+        default='00',
+        db_column='hisystem',
+        help_text='系統歸屬'
+    )
+    parameterid = models.CharField(
+        max_length=30,
+        db_column='parameterid',
+        help_text='變數代號'
+    )
+    serialno = models.IntegerField(
+        blank=True,
+        null=True,
+        db_column='serialno',
+        help_text='排序序號'
+    )
+    parametervalue = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        db_column='parametervalue',
+        help_text='參數值'
+    )
+    description = models.CharField(
+        max_length=250,
+        blank=True,
+        null=True,
+        db_column='description',
+        help_text='說明敘述'
+    )
+    visitctrl = models.CharField(
+        max_length=1,
+        default='9',
+        db_column='visitctrl',
+        help_text='訪問限制等級'
+    )
+    specialctrl = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        db_column='specialctrl',
+        help_text='特殊控制碼'
+    )
+    istype = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        db_column='istype',
+        help_text='參數類別/模組屬性'
+    )
+
+    class Meta:
+        managed = True
+        db_table = 'sys_parameter'
+        ordering = ['serialno', 'hisystem', 'parameterid']
+        unique_together = (('hisystem', 'parameterid'),)
+        verbose_name = '系統參數'
+
+    def __str__(self):
+        return f"[{self.hisystem} - {self.parameterid}] {self.parametervalue}"
+
+
+

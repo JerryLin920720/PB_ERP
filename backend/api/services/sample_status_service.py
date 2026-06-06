@@ -4,9 +4,14 @@ from api.models import Dp030, Dp031, Dp033
 def get_sample_status_mode():
     """
     獲取樣品結案判定模式。
-    未來若資料庫中新增參數設定表（如 sys_parameters / SysParameter），可在此擴充讀取邏輯。
-    目前預設安全降級 (Fallback) 回傳 '1' (代表 Mode 1)。
     """
+    try:
+        from api.services.sys_parameter_cache import SysParameterCache
+        mode = SysParameterCache.get_parameter('00', 'samplestatus')
+        if mode:
+            return mode
+    except Exception:
+        pass
     return '1'
 
 def recalculate_sample_status(dp030_keys=None, dp031_keys=None, dp033_keys=None):
