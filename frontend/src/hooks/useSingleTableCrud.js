@@ -134,6 +134,7 @@ export default function useSingleTableCrud({
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // 用於在非同步操作中獲取最新選中行
@@ -170,6 +171,7 @@ export default function useSingleTableCrud({
 
       setRows(data);
       setIsEditing(false);
+    setIsDirty(false);
 
       if (data.length > 0) {
         // 若已有選中項，嘗試重新尋找或定位至第一筆
@@ -189,12 +191,30 @@ export default function useSingleTableCrud({
 
   // 3. 點選/選取行聯動 Form
   const handleSelectRow = (record) => {
-    setSelectedRow(record);
-    if (record) {
-      const formValues = prepareFormValues ? prepareFormValues(record) : record;
-      form?.setFieldsValue(formValues);
+    const doSelect = () => {
+      setSelectedRow(record);
+      setIsDirty(false); // Reset dirty flag when switching rows
+      if (record) {
+        const formValues = prepareFormValues ? prepareFormValues(record) : record;
+        form?.setFieldsValue(formValues);
+      } else {
+        form?.resetFields();
+      }
+    };
+
+    if (isDirty && (!selectedRow || (record && record[rowKey] !== selectedRow[rowKey]))) {
+      Modal.confirm({
+        title: '尚未儲存',
+        content: '有未儲存的變更，切換資料將遺失這些變更，確定要切換嗎？',
+        okText: '放棄變更',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => {
+          doSelect();
+        }
+      });
     } else {
-      form?.resetFields();
+      doSelect();
     }
   };
 
@@ -322,6 +342,7 @@ export default function useSingleTableCrud({
             handleSelectRow(nextRow || remaining[0] || null);
           }
           setIsEditing(false);
+    setIsDirty(false);
           message.success('已移除未存檔項目');
         } else {
           // B. 既有 Row 刪除
@@ -414,6 +435,7 @@ export default function useSingleTableCrud({
       }
 
       setIsEditing(false);
+    setIsDirty(false);
       if (afterSave) {
         afterSave(savedRecord);
       }
@@ -437,6 +459,7 @@ export default function useSingleTableCrud({
   // 7. 放棄變更 (Cancel)
   const handleCancel = () => {
     setIsEditing(false);
+    setIsDirty(false);
     const prevKey = selectedRowRef.current?.[rowKey];
     if (typeof prevKey === 'string' && prevKey.startsWith('temp_')) {
       // 若是新增一半放棄，直接移除該行
@@ -483,6 +506,8 @@ export default function useSingleTableCrud({
     selectedRow,
     isEditing,
     loading,
+    isDirty,
+    setIsDirty,
     setIsEditing,
     fetchData,
     handleSelectRow,

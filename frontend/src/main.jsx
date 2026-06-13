@@ -5,7 +5,14 @@ import App from './App.jsx'
 import { AuthProvider } from './auth/AuthContext'
 import axios from 'axios'
 
-// Set axios baseURL dynamically for local development to avoid Vite dev server fallback to index.html
+window.addEventListener('error', e => console.error('GLOBAL ERROR:', e.error));
+window.addEventListener('unhandledrejection', e => console.error('GLOBAL PROMISE ERROR:', e.reason));
+const oldError = console.error;
+console.error = (...args) => {
+  console.log('CONSOLE.ERROR INTERCEPT:', ...args);
+  oldError(...args);
+};
+
 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
   axios.defaults.baseURL = 'http://localhost:8001';
 }

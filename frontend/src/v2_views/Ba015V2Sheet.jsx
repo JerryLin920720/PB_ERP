@@ -788,6 +788,7 @@ function createBa015Sheet(entityType) {
     sheetId: entityType === '1' ? 'ba015' : entityType === '2' ? 'ba025' : 'ba030',
     title: meta.title,
     breadcrumb: meta.breadcrumb,
+    enableSheetState: true,
 
     api: {
       listUrl: `${API}ba015/?type=${entityType}`,

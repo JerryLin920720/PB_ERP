@@ -524,6 +524,55 @@ export const lookupRegistry = {
     ],
     displayField: 'paymenttype',
     returnValue: 'gkey'
-  }
+  },
+
+  // 客戶聯絡人 (Cascading Lookup Example)
+  ba014: {
+    moduleCode: 'BA014',
+    moduleName: '客戶聯絡人',
+    title: '關聯作業：BA014 客戶聯絡人',
+    apiUrl: '/api/ba014/',
+    rowKey: 'gkey',
+    searchFields: ['contactname', 'tel'],
+    columns: [
+      { title: '聯絡人', dataIndex: 'contactname', key: 'contactname', width: '150px' },
+      { title: '電話', dataIndex: 'tel', key: 'tel', width: '150px' },
+      { title: 'Email', dataIndex: 'email', key: 'email' }
+    ],
+    displayField: 'contactname',
+    returnValue: 'gkey',
+    dependsOn: [
+      {
+        sourceField: 'ba010gkey',
+        queryParam: 'ba010gkey',
+        required: true,
+        message: '請先選擇客戶'
+      }
+    ]
+  },
+  // 工廠聯絡人 (Cascading Lookup Example)
+  ba016: {
+    moduleCode: 'BA016',
+    moduleName: '工廠聯絡人',
+    title: '關聯作業：BA016 工廠聯絡人',
+    apiUrl: '/api/ba016/',
+    rowKey: 'gkey',
+    searchFields: ['contactname', 'tel'],
+    columns: [
+      { title: '聯絡人', dataIndex: 'contactname', key: 'contactname', width: '150px' },
+      { title: '電話', dataIndex: 'tel', key: 'tel', width: '150px' },
+      { title: 'Email', dataIndex: 'email', key: 'email' }
+    ],
+    displayField: 'contactname',
+    returnValue: 'gkey',
+    dependsOn: [
+      {
+        sourceField: 'ba015gkey',
+        queryParam: 'ba015gkey',
+        required: true,
+        message: '請先選擇工廠'
+      }
+    ]
+  },
 };
 

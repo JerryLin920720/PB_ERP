@@ -62,6 +62,10 @@ export default function Dp015Sheet() {
   const [dp017List, setDp017List] = useState([]); 
   const [dp018List, setDp018List] = useState([]); 
 
+  const [deletedDp016, setDeletedDp016] = useState([]);
+  const [deletedDp017, setDeletedDp017] = useState([]);
+  const [deletedDp018, setDeletedDp018] = useState([]);
+
   const [activeDp017, setActiveDp017] = useState(null); 
 
   const [lookupState, setLookupState] = useState({
@@ -181,6 +185,9 @@ export default function Dp015Sheet() {
       setDp016List(res16.data);
       setDp017List(res17.data);
       setDp018List(res18.data);
+      setDeletedDp016([]);
+      setDeletedDp017([]);
+      setDeletedDp018([]);
       setActiveDp017(res17.data[0] || null);
     } catch (e) {
       message.error('載入大底子表細節失敗');
@@ -202,6 +209,9 @@ export default function Dp015Sheet() {
     setDp016List([]);
     setDp017List([]);
     setDp018List([]);
+    setDeletedDp016([]);
+    setDeletedDp017([]);
+    setDeletedDp018([]);
     setActiveDp017(null);
     setIsEditing(true);
     setActiveTab('2');
@@ -224,17 +234,32 @@ export default function Dp015Sheet() {
       };
 
       setLoading(true);
-      const response = await axios.post(`${API_BASE}/dp015/deep_save/`, {
-        master: mPayload,
-        molds: dp016List,
-        costs: dp017List,
-        sizes: dp018List
-      });
+      const isNewMaster = selectedMaster.gkey.startsWith('temp_');
+      const payload = {
+        master: {
+          ...mPayload,
+          gkey: isNewMaster ? undefined : mPayload.gkey
+        },
+        dp016: {
+          upsert: dp016List.map(item => ({ ...item, gkey: item.gkey.startsWith('temp_') ? undefined : item.gkey })),
+          delete: deletedDp016.map(k => ({ gkey: k }))
+        },
+        dp017: {
+          upsert: dp017List.map(item => ({ ...item, gkey: item.gkey.startsWith('temp_') ? undefined : item.gkey })),
+          delete: deletedDp017.map(k => ({ gkey: k }))
+        },
+        dp018: {
+          upsert: dp018List.map(item => ({ ...item, gkey: item.gkey.startsWith('temp_') ? undefined : item.gkey })),
+          delete: deletedDp018.map(k => ({ gkey: k }))
+        }
+      };
+
+      const response = await axios.post(`${API_BASE}/dp015/deep_save/`, payload);
 
       if (response.data.success) {
         message.success('大底主從明細原子儲存成功！');
         setIsEditing(false);
-        const savedGkey = response.data.gkey;
+        const savedGkey = response.data?.data?.gkey || response.data?.gkey || mPayload?.gkey;
         const res = await axios.get(`${API_BASE}/dp015/`, { params: qFilters });
         setEntities(res.data);
         const updated = res.data.find(e => e.gkey === savedGkey);
@@ -364,6 +389,10 @@ export default function Dp015Sheet() {
         }
       }
       const filteredSizes = dp018List.filter(s => s.dp017gkey !== list[idx].gkey);
+      const droppedSizes = dp018List.filter(s => s.dp017gkey === list[idx].gkey && !s.gkey.startsWith('temp_'));
+      if (droppedSizes.length > 0) {
+        setDeletedDp018(prev => [...prev, ...droppedSizes.map(s => s.gkey)]);
+      }
       setDp018List([...filteredSizes, ...sizeRows]);
       list[idx].fcpairs = 0;
       list[idx].amount = 0;
@@ -638,7 +667,13 @@ export default function Dp015Sheet() {
                             {
                               title: '刪除', width: 70, align: 'center', fixed: 'right',
                               render: (_, __, idx) => isEditing ? (
-                                <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={() => setDp016List(dp016List.filter((_, i) => i !== idx))} />
+                                <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={() => {
+                                  const deleted = dp016List[idx];
+                                  if (!deleted.gkey.startsWith('temp_')) {
+                                    setDeletedDp016(prev => [...prev, deleted.gkey]);
+                                  }
+                                  setDp016List(dp016List.filter((_, i) => i !== idx));
+                                }} />
                               ) : '-'
                             }
                           ]}
@@ -745,7 +780,16 @@ export default function Dp015Sheet() {
                                   render: (_, __, idx) => isEditing ? (
                                     <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={() => {
                                       const deleted = dp017List[idx];
+                                      if (!deleted.gkey.startsWith('temp_')) {
+                                        setDeletedDp017(prev => [...prev, deleted.gkey]);
+                                      }
                                       setDp017List(dp017List.filter((_, i) => i !== idx));
+                                      
+                                      const relatedSizes = dp018List.filter(s => s.dp017gkey === deleted.gkey);
+                                      const relatedSavedSizes = relatedSizes.filter(s => !s.gkey.startsWith('temp_'));
+                                      if (relatedSavedSizes.length > 0) {
+                                        setDeletedDp018(prev => [...prev, ...relatedSavedSizes.map(s => s.gkey)]);
+                                      }
                                       setDp018List(dp018List.filter(s => s.dp017gkey !== deleted.gkey));
                                       if (activeDp017?.gkey === deleted.gkey) setActiveDp017(null);
                                     }} />

@@ -142,3 +142,30 @@ def recalculate_sample_status(dp030_keys=None, dp031_keys=None, dp033_keys=None)
                     d30.save()
             except Dp030.DoesNotExist:
                 pass
+
+def calculate_dp033_outstanding(dp033_instance, samplestatus_mode=None):
+    """
+    計算特定尺碼 (DP033) 的未交量 (Outstanding)。
+    基於 DP032 Outstanding Sample List 與 DP040 import_candidates 邏輯。
+    """
+    from decimal import Decimal
+    if samplestatus_mode is None:
+        samplestatus_mode = get_sample_status_mode()
+        
+    custpairs = dp033_instance.custpairs or Decimal('0')
+    keeppairs = dp033_instance.keeppairs or Decimal('0')
+    sentpairs = dp033_instance.sentpairs or Decimal('0')
+    receive = dp033_instance.receive or Decimal('0')
+    
+    if samplestatus_mode in ['1', '2']:
+        if samplestatus_mode == '2':
+            outstanding = custpairs - sentpairs
+        else:
+            outstanding = (custpairs + keeppairs) - sentpairs
+    elif samplestatus_mode == '3':
+        outstanding = (custpairs + keeppairs - receive) - sentpairs
+    else:
+        outstanding = custpairs - sentpairs
+        
+    return max(outstanding, Decimal('0'))
+

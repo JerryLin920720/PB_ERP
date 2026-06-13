@@ -4,8 +4,13 @@ import { message, Modal } from 'antd';
 import './Win32DataWindow.css';
 import ERPImagePreview from './erp/shared/ERPImagePreview';
 import ERPImageUploadField from './erp/shared/ERPImageUploadField';
+import ERPLookupField from './erp/lookup/ERPLookupField';
+import ReportModal from './erp/report/ReportModal';
 import useAuth from '../auth/useAuth';
 import { canExecuteCommand } from '../auth/permissionUtils';
+import useSheetState from '../hooks/useSheetState';
+import useItemChanged from '../hooks/useItemChanged';
+import { getProgramConfig } from '../config/programRegistry';
 
 /**
  * Normalize API response content to extract list rows
@@ -244,9 +249,25 @@ export default function Win32DataWindow({
   sequenceScopeField,
   sequenceScopeValue,
   onDirtyStateChange,
-  onFetchSuccess
+  onFetchSuccess,
+  enableSheetState
 }) {
   const { user, permissions } = useAuth();
+  
+  // Phase 9A-3: 前端欄位權限 metadata 整合 (向下相容)
+  const fieldPermissions = user?.field_permissions?.[permissionKey] || {};
+  const activeColumns = columns.filter(col => {
+    const perm = fieldPermissions[col.key || col.dataIndex];
+    if (perm === 'hide') return false; // hide: 不顯示該欄位
+    return true;
+  }).map(col => {
+    const perm = fieldPermissions[col.key || col.dataIndex];
+    if (perm === 'readonly') {
+      return { ...col, editable: false }; // readonly: 顯示但不可編輯
+    }
+    return col;
+  });
+
   const [rows, setRows] = useState([]);
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
   const [editingRowIndex, setEditingRowIndex] = useState(-1); // 🔒 專屬編輯列索引，預設 -1 (唯讀模式)
@@ -256,6 +277,41 @@ export default function Win32DataWindow({
   const [deleteSet, setDeleteSet] = useState(new Set()); 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('就緒');
+
+  // Report Modal states
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportDefaultAction, setReportDefaultAction] = useState('preview');
+
+
+  // Sheet State Integration for Pilot
+
+  // ItemChanged 邏輯
+  const isDetail = sheetId && sheetId.includes('-');
+  const scope = isDetail ? 'detail' : 'master';
+  const detailKey = isDetail ? sheetId.split('-')[1] : null;
+  const { getRules, applyRules, isApplyingRef } = useItemChanged(sheetId);
+  const itemChangedRules = getRules(scope, detailKey);
+  const sheetStateHook = useSheetState({
+    tabId: enableSheetState ? sheetId : null,
+    programId: enableSheetState ? sheetId : null,
+    initialState: 'browse'
+  });
+
+  const updateSheetState = (newState) => {
+    if (enableSheetState) sheetStateHook.setState(newState);
+  };
+  const updateSheetDirty = (isDirty) => {
+    if (enableSheetState) {
+      if (isDirty) sheetStateHook.markDirty(true);
+      else sheetStateHook.markClean();
+    }
+  };
+  const updateSheetSelection = (count, record) => {
+    if (enableSheetState) {
+      sheetStateHook.setSelection(count);
+      sheetStateHook.updateSelectedRecord(record);
+    }
+  };
 
   // Trigger row selection callback backward-compatibly
   const onRowSelectRef = useRef(onRowSelect);
@@ -267,6 +323,7 @@ export default function Win32DataWindow({
     if (onRowSelectRef.current) {
       onRowSelectRef.current(rows[selectedRowIndex] || null);
     }
+    updateSheetSelection(selectedRowIndex >= 0 ? 1 : 0, selectedRowIndex >= 0 ? rows[selectedRowIndex] : null);
   }, [selectedRowIndex, rows]);
 
   const isDirty = Object.keys(dirtyMap).length > 0 || deleteSet.size > 0;
@@ -279,6 +336,7 @@ export default function Win32DataWindow({
   // 📥 檢索 (Retrieve)
   const fetchRows = async () => {
     setLoading(true);
+    updateSheetState('browse'); // Default to browse during loading
     setStatusMsg('正在讀取資料庫...');
     try {
       const response = await axios.get(apiUrl);
@@ -308,12 +366,15 @@ export default function Win32DataWindow({
       setSelectedRowIndex(sortedData.length > 0 ? 0 : -1);
       setEditingRowIndex(-1); // 重置為查詢模式
       setStatusMsg(`讀取完成。共 ${sortedData.length} 筆資料。`);
+      updateSheetDirty(false);
+      updateSheetState('browse');
       if (onFetchSuccess) {
         onFetchSuccess(sortedData);
       }
     } catch (err) {
       console.error('[Win32DataWindow] fetchRows Error:', err);
       setStatusMsg(`錯誤: ${err.response?.data?.detail || err.message}`);
+      updateSheetState('error');
     } finally {
       setLoading(false);
     }
@@ -361,7 +422,7 @@ export default function Win32DataWindow({
     const emptyRow = {
       gkey: tempGkey
     };
-    columns.forEach(col => {
+    activeColumns.forEach(col => {
       if (col.editable) {
         emptyRow[col.key] = '';
       }
@@ -405,6 +466,8 @@ export default function Win32DataWindow({
       [tempGkey]: { ...newRow }
     }));
 
+    updateSheetState('insert');
+    updateSheetDirty(true);
     setStatusMsg('已插入新行。請直接點選格內鍵入資料。');
   };
 
@@ -449,13 +512,17 @@ export default function Win32DataWindow({
       setDirtyMap(nextDirty);
       setSelectedRowIndex(prev => (prev === 0 ? 0 : prev - 1));
       setStatusMsg('已移除未儲存的新資料列。');
+      if (Object.keys(nextDirty).length === 0) {
+        updateSheetDirty(false);
+        updateSheetState('browse');
+      }
       return;
     }
 
     // 若選到的是資料庫既有資料：
     Modal.confirm({
       title: '確定要刪除此筆資料嗎？',
-      content: `識別資料: ${getDeleteDisplayText(selectedRow, columns)}`,
+      content: `識別資料: ${getDeleteDisplayText(selectedRow, activeColumns)}`,
       okText: '確定',
       cancelText: '取消',
       onOk: async () => {
@@ -502,7 +569,7 @@ export default function Win32DataWindow({
           message.success('刪除成功');
           await fetchRows();
         } catch (err) {
-          const errorMsg = formatBackendError(err.response?.data || err.message, columns);
+          const errorMsg = formatBackendError(err.response?.data || err.message, activeColumns);
           message.error(`刪除失敗:\n${errorMsg}`);
           setStatusMsg(`刪除失敗: ${errorMsg}`);
         } finally {
@@ -517,6 +584,8 @@ export default function Win32DataWindow({
   const handleSave = async () => {
     console.log('[Win32DataWindow] handleSave called');
     setLoading(true);
+    const prevState = sheetStateHook.state;
+    updateSheetState('saving');
     setStatusMsg('正在寫入批次交易 (Bulk Saving)...');
     
     // 從實時 Ref 讀取狀態，徹底杜絕 Stale Closure 閉包過期問題
@@ -537,7 +606,7 @@ export default function Win32DataWindow({
       .filter(row => row._isNew || currentDirtyMap[row.gkey])
       .filter(row => {
         if (row._isNew) {
-          const actualFields = columns.filter(col => !col.hidden && col.key !== 'serialno' && col.key !== 'gkey');
+          const actualFields = activeColumns.filter(col => !col.hidden && col.key !== 'serialno' && col.key !== 'gkey');
           const isBlank = actualFields.every(col => {
             const val = currentDirtyMap[row.gkey]?.[col.key] !== undefined
               ? currentDirtyMap[row.gkey][col.key]
@@ -558,40 +627,72 @@ export default function Win32DataWindow({
         };
       });
 
-    // 🔒 欄位驗證 (Required & Range validation)
-    for (const row of upsertList) {
-      for (const col of columns) {
+        // 🔒 欄位驗證 (Required & Range validation)
+    // 優先順序: 1. columns 欄位設定, 2. programRegistry.validationConfig
+    const programId = sheetId ? sheetId.split('-')[0] : null;
+    const registryConfig = programId ? getProgramConfig(programId)?.validationConfig : null;
+    
+    // 將 validationConfig 轉化為字典加速尋找
+    const reqMap = {};
+    const numMap = {};
+    const strMap = {};
+    if (registryConfig) {
+      (registryConfig.requiredFields || []).forEach(r => reqMap[r.field] = r);
+      (registryConfig.numericRules || []).forEach(r => numMap[r.field] = r);
+      (registryConfig.stringRules || []).forEach(r => strMap[r.field] = r);
+    }
+
+    for (let rowIndex = 0; rowIndex < upsertList.length; rowIndex++) {
+      const row = upsertList[rowIndex];
+      for (const col of activeColumns) {
         const val = row[col.key];
+        const isRequired = col.required || (reqMap[col.key] !== undefined);
+        const minVal = col.min !== undefined ? col.min : numMap[col.key]?.min;
+        const maxVal = col.max !== undefined ? col.max : numMap[col.key]?.max;
+        const maxLen = col.maxLength !== undefined ? col.maxLength : strMap[col.key]?.maxLength;
+        const label = col.label || reqMap[col.key]?.label || col.key;
         
-        // 必填檢查
-        if (col.required) {
+        // 必填檢查 (包含 lookup)
+        if (isRequired) {
           if (val === undefined || val === null || String(val).trim() === '') {
-            message.error(`【${title}】的欄位「${col.label}」不可為空白！`);
+            message.error(`【${title}】第 ${rowIndex + 1} 列，欄位「${label}」不可為空白！`);
             setLoading(false);
             setStatusMsg('驗證失敗');
             return;
           }
         }
         
-        // 數值範圍檢查
+        // 數值範圍與字串長度檢查
         if (val !== undefined && val !== null && val !== '') {
-          if (col.min !== undefined || col.max !== undefined) {
+          // 若是字串長度檢查
+          if (maxLen !== undefined) {
+             if (String(val).length > maxLen) {
+                message.error(`【${title}】第 ${rowIndex + 1} 列，欄位「${label}」長度不可超過 ${maxLen}！`);
+                setLoading(false);
+                updateSheetState(prevState === 'insert' ? 'insert' : 'edit');
+                setStatusMsg('驗證失敗');
+                return;
+             }
+          }
+
+          if (minVal !== undefined || maxVal !== undefined || col.type === 'number') {
             const numVal = Number(val);
             if (isNaN(numVal)) {
-              message.error(`【${title}】的欄位「${col.label}」必須為有效數字！`);
+              message.error(`【${title}】第 ${rowIndex + 1} 列，欄位「${label}」必須為有效數字！`);
               setLoading(false);
               setStatusMsg('驗證失敗');
               return;
             }
-            if (col.min !== undefined && numVal < col.min) {
-              message.error(`【${title}】的欄位「${col.label}」值不能小於 ${col.min}！`);
+            if (minVal !== undefined && numVal < minVal) {
+              message.error(`【${title}】第 ${rowIndex + 1} 列，欄位「${label}」值不能小於 ${minVal}！`);
               setLoading(false);
               setStatusMsg('驗證失敗');
               return;
             }
-            if (col.max !== undefined && numVal > col.max) {
-              message.error(`【${title}】的欄位「${col.label}」值不能大於 ${col.max}！`);
+            if (maxVal !== undefined && numVal > maxVal) {
+              message.error(`【${title}】第 ${rowIndex + 1} 列，欄位「${label}」值不能大於 ${maxVal}！`);
               setLoading(false);
+              updateSheetState(prevState === 'insert' ? 'insert' : 'edit');
               setStatusMsg('驗證失敗');
               return;
             }
@@ -619,6 +720,8 @@ export default function Win32DataWindow({
     if (upsertList.length === 0 && deleteList.length === 0) {
       setStatusMsg('無任何資料異動，無須存檔。');
       setLoading(false);
+      updateSheetState('browse');
+      updateSheetDirty(false);
       return;
     }
 
@@ -629,26 +732,57 @@ export default function Win32DataWindow({
       if (res.data.success) {
         setStatusMsg('存檔成功！正在重載最新資料...');
         setEditingRowIndex(-1); // 存檔成功後回歸唯讀檢視
+        updateSheetState('browse');
+        updateSheetDirty(false);
         await fetchRows();
       } else {
         throw new Error(res.data.detail || '存檔失敗');
       }
     } catch (err) {
       console.log('[Win32DataWindow] save failed. status:', err.response?.status, 'data:', err.response?.data, 'message:', err.message);
-      const errorMsg = formatBackendError(err.response?.data || err.message, columns);
+      const errorMsg = formatBackendError(err.response?.data || err.message, activeColumns);
       message.error(`存檔失敗:\n${errorMsg}`);
       setStatusMsg(`存檔失敗: ${errorMsg}`);
+      updateSheetState(prevState === 'insert' ? 'insert' : 'edit');
       setLoading(false);
     }
   };
 
+  // 🔄 放棄變更 (Cancel)
+  const handleCancel = () => {
+    // 過濾掉未存檔的新增列 (temp_ 開頭)
+    const remainingRows = rows.filter(row => !(typeof row.gkey === 'string' && row.gkey.startsWith('temp_')));
+    // 還原髒資料追蹤
+    setDirtyMap({});
+    setDeleteSet(new Set());
+    setRows(remainingRows);
+    setEditingRowIndex(-1);
+    updateSheetState('browse');
+    updateSheetDirty(false);
+    setStatusMsg('已放棄變更並還原資料。');
+    message.info('已放棄未存檔的變更');
+  };
+
   // ⚙️ 即時儲存格變更 (Immediate Inline Value Committer)
-  const handleCellChange = (rIndex, colKey, newVal) => {
+  const handleCellChange = (rIndex, colKey, newVal, fullRecord = null) => {
     setRows(prevRows => {
       if (rIndex < 0 || rIndex >= prevRows.length) return prevRows;
       const nextRows = [...prevRows];
       const targetRow = nextRows[rIndex];
-      const updatedRow = { ...targetRow, [colKey]: newVal };
+      let updatedRow = { ...targetRow, [colKey]: newVal };
+      
+      // 處理 Lookup returnFields 多欄回填
+      if (fullRecord) {
+        const colDef = activeColumns.find(c => c.key === colKey);
+        if (colDef && colDef.returnFields) {
+          for (const [targetField, sourceField] of Object.entries(colDef.returnFields)) {
+            if (fullRecord[sourceField] !== undefined) {
+              updatedRow[targetField] = fullRecord[sourceField];
+            }
+          }
+        }
+      }
+
       nextRows[rIndex] = updatedRow;
       
       // Update dirtyMap with the fully updated row in a single pass
@@ -657,6 +791,11 @@ export default function Win32DataWindow({
         [targetRow.gkey]: updatedRow
       }));
       
+      updateSheetDirty(true);
+      if (sheetStateHook.state !== 'insert') {
+        updateSheetState('edit');
+      }
+
       // Print cell change log for debugging as requested by the user
       console.log('[MR015 DETAIL CELL CHANGE]', {
         sheetId,
@@ -679,6 +818,7 @@ export default function Win32DataWindow({
       handleDelete,
       handleInsert,
       fetchRows,
+      handleCancel,
       selectedRowIndex,
       dirtyMap,
       deleteSet,
@@ -710,6 +850,11 @@ export default function Win32DataWindow({
           console.log('[Win32DataWindow] save command received');
           ops.handleSave();
         }
+        else if (action === 'cancel') ops.handleCancel();
+        else if (action === 'print') {
+          setReportDefaultAction('preview');
+          setReportModalVisible(true);
+        }
       }
     };
 
@@ -732,7 +877,7 @@ export default function Win32DataWindow({
           <thead>
             <tr>
               <th className="dw-th" style={{ width: '30px', textAlign: 'center' }}></th>
-              {columns.filter(col => !col.hidden).map(col => (
+              {activeColumns.filter(col => !col.hidden).map(col => (
                 <th key={col.key} className="dw-th" style={{ width: col.width || 'auto' }}>
                   {col.required && <span style={{ color: '#ff4d4f', marginRight: '4px' }}>*</span>}
                   {col.label}
@@ -751,14 +896,18 @@ export default function Win32DataWindow({
                   key={row.gkey} 
                   className={`dw-row ${isSelected ? 'selected' : ''} ${isDeleted ? 'deleted' : ''} ${rIndex === editingRowIndex ? 'in-editing' : ''}`}
                   onClick={() => setSelectedRowIndex(rIndex)}
-                  onDoubleClick={() => setEditingRowIndex(rIndex)} // 🌟 實測 PB 操作：雙擊直接進入編輯模式
+                  onDoubleClick={() => {
+                    const approved = row.is_approved === 'Y' || row.is_approved === true || row.approve === 'Y' || row.approve === true || row.capprove === 'Y' || row.capprove === true;
+                    if (approved) return; // 已審核禁止雙擊進入編輯模式
+                    setEditingRowIndex(rIndex);
+                  }}
                 >
                   {/* 狀態指示符：當前列標為黑箭頭，有髒資料標為 * */}
                   <td className="dw-indicator-col">
                     {isSelected ? '▶' : (isRowDirty ? '*' : '')}
                   </td>
 
-                  {columns.filter(col => !col.hidden).map(col => {
+                  {activeColumns.filter(col => !col.hidden).map(col => {
                     // 核心唯讀控制邏輯：僅在點擊編輯或雙擊解鎖時，才顯化輸入格，其餘欄位純文字渲染防誤改
                     const showInput = rIndex === editingRowIndex && col.editable && !isDeleted;
 
@@ -784,6 +933,16 @@ export default function Win32DataWindow({
                             <ERPImageUploadField
                               value={row[col.key] === undefined || row[col.key] === null ? '' : row[col.key]}
                               onChange={(newVal) => handleCellChange(rIndex, col.key, newVal)}
+                            />
+                          ) : col.type === 'lookup' ? (
+                            <ERPLookupField
+                              type={col.lookupType}
+                              lookupConfig={col.lookupConfig}
+                              contextValues={row}
+                              value={row[col.key] === undefined || row[col.key] === null ? '' : row[col.key]}
+                              onChange={(val, record) => handleCellChange(rIndex, col.key, val, record)}
+                              disabled={false}
+                              style={{ border: 'none', height: '24px' }}
                             />
                           ) : (
                             <input
@@ -812,7 +971,7 @@ export default function Win32DataWindow({
             })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={columns.filter(col => !col.hidden).length + 1} style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                <td colSpan={activeColumns.filter(col => !col.hidden).length + 1} style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                   目前尚無資料。請點擊頂部工具列「查詢」載入，或點擊「增行」開始新增。
                 </td>
               </tr>
@@ -832,6 +991,15 @@ export default function Win32DataWindow({
           </span>
         )}
       </div>
+      <ReportModal 
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        reportConfig={sheetId ? getProgramConfig(sheetId.split('-')[0])?.reportConfig : null}
+        activeRecord={rows[selectedRowIndex]}
+        queryParams={{}}
+        isDirty={Object.keys(dirtyMap).length > 0 || deleteSet.size > 0}
+        defaultAction={reportDefaultAction}
+      />
     </div>
   );
 }

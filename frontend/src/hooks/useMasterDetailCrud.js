@@ -332,14 +332,32 @@ export default function useMasterDetailCrud({
 
   // 3. 選取主檔列 (自動切換 activeArea 至 master)
   const handleSelectMaster = (row) => {
-    setSelectedMaster(row);
-    setSelectedDetail(null);
-    setActiveArea('master');
-    // 立即清空明細資料，避免顯示舊主檔的明細（避免混淆與 race condition）
-    setDetailRows([]);
-    if (row) {
-      const keyVal = row[masterKey];
-      fetchDetail(keyVal);
+    const doSelect = () => {
+      setSelectedMaster(row);
+      setSelectedDetail(null);
+      setActiveArea('master');
+      // 立即清空明細資料，避免顯示舊主檔的明細（避免混淆與 race condition）
+      setDetailRows([]);
+      if (row) {
+        const keyVal = row[masterKey];
+        fetchDetail(keyVal);
+      }
+    };
+
+    if (isDirty && (!selectedMaster || (row && row[masterKey] !== selectedMaster[masterKey]))) {
+      Modal.confirm({
+        title: '尚未儲存',
+        content: '有未儲存的變更，切換資料將遺失這些變更，確定要切換嗎？',
+        okText: '放棄變更',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => {
+          clearDirtyState();
+          doSelect();
+        }
+      });
+    } else {
+      doSelect();
     }
   };
 

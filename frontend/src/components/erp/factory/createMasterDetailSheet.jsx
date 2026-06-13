@@ -4,6 +4,7 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ERPSheetPage from '../shell/ERPSheetPage';
 import ERPMasterDetailLayout from '../master-detail/ERPMasterDetailLayout';
+import { SHEET_STATE } from '../../../config/programRegistry';
 import useMasterDetailCrud from '../../../hooks/useMasterDetailCrud';
 
 /**
@@ -150,6 +151,32 @@ export default function createMasterDetailSheet(config) {
         });
       }
     };
+
+
+    // 監聽 crud 狀態，對應到新的狀態機並拋出給 Navbar
+    useEffect(() => {
+      let currentState = SHEET_STATE.BROWSE;
+      if (isDirty && !selectedMaster) {
+        currentState = SHEET_STATE.NEW;
+      } else if (isDirty && selectedMaster) {
+        currentState = SHEET_STATE.EDIT;
+      } else if (isEditing) {
+        currentState = SHEET_STATE.EDIT;
+      }
+
+      window.dispatchEvent(new CustomEvent('mdi-sheet-state-change', {
+        detail: {
+          tabId: sheetId,
+          programId: sheetId,
+          state: currentState,
+          dirty: isDirty,
+          selectedCount: selectedMaster ? 1 : 0,
+          approved: selectedMaster?.is_approved === 'Y',
+          readonly: false,
+          selectedRecord: selectedMaster
+        }
+      }));
+    }, [isEditing, isDirty, selectedMaster, sheetId]);
 
     // 元件載入時，全自動檢索 Master 資料
     useEffect(() => {

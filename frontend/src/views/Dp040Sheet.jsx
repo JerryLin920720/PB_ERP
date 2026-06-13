@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import ReportModal from '../components/erp/report/ReportModal';
+import { getProgramConfig } from '../config/programRegistry';
 import { Tabs, Table, Button, Input, Select, Space, Card, Row, Col, Form, DatePicker, message, Popconfirm, Tag, Alert } from 'antd';
 import { SaveOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, SearchOutlined, GiftOutlined, CheckCircleOutlined, WarningOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -9,6 +11,8 @@ const API_URL = 'http://localhost:8001/api/';
 export default function Dp040Sheet() {
   const [activeTabKey, setActiveTabKey] = useState('query');
   const [loading, setLoading] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportDefaultAction, setReportDefaultAction] = useState('preview');
   const [isDirty, setIsDirty] = useState(false);
 
   // 💾 Core Master & Detail States
@@ -161,7 +165,8 @@ export default function Dp040Sheet() {
         message.success(res.data.message);
         setIsDirty(false);
         doQuery();
-        const refreshed = await axios.get(`${API_URL}dp040/${res.data.gkey}/`);
+        const newGkey = res.data.data ? res.data.data.gkey : res.data.gkey;
+        const refreshed = await axios.get(`${API_URL}dp040/${newGkey}/`);
         loadDetails(refreshed.data);
       }
     } catch (e) {
@@ -525,6 +530,15 @@ export default function Dp040Sheet() {
           ]}
         />
       </div>
+      <ReportModal 
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        reportConfig={getProgramConfig('dp040')?.reportConfig}
+        activeRecord={selectedMaster}
+        queryParams={{}}
+        isDirty={isDirty}
+        defaultAction={reportDefaultAction}
+      />
     </div>
   );
 }

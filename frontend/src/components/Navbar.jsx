@@ -6,36 +6,63 @@ import {
 } from 'lucide-react';
 import useAuth from '../auth/useAuth';
 import { isAdmin, inferPermissionKey } from '../auth/permissionUtils';
+import { getToolbarConfig, isActionVisible, isActionEnabled, SHEET_STATE, ACTION_TO_PERMISSION } from '../config/programRegistry';
 import './Navbar.css';
 
 /**
- * Navbar: 升級版 - 支援下拉選單(Menu)、折疊切換(Toggle)與擴展物理按鈕
+ * Navbar: 升級版 - Config-Driven
  */
 export default function Navbar({ 
   onNavigate, 
   onDispatchCommand, 
   activeTabId,
   isSidebarCollapsed,
-  onToggleSidebar
+  onToggleSidebar,
+  currentSheetState
 }) {
   const { logout, hasPermission, user } = useAuth();
+  
+  // Tab ID 判斷是否為實際作業 (排除導航與 Map)
   const isSheetActive = activeTabId !== 'navigation' && activeTabId !== 'dp_map';
   const programId = isSheetActive ? inferPermissionKey(activeTabId) : null;
+  
+  // 取得目前 Sheet 回報的狀態與選中的 Record，若無則預設 BROWSE
+  const sheetState = currentSheetState?.state || SHEET_STATE.BROWSE;
+  const selectedRecord = currentSheetState?.selectedRecord || null;
 
-  const isBtnDisabled = (action) => {
-    if (!isSheetActive) return true;
-    if (user && isAdmin(user)) return false;
-    if (action === 'save') {
-      return !(hasPermission(programId, 'new') || hasPermission(programId, 'edit'));
+  // 封裝權限判斷，傳入 isActionEnabled
+  const _checkPermission = (action) => {
+    if (user && isAdmin(user)) return true;
+    const pbAction = ACTION_TO_PERMISSION[action] || action;
+    
+    // Save 的權限特殊處理: 有 edit 或 new 權限即可 save
+    if (action === 'save' || action === 'cancel') {
+      return hasPermission(programId, 'new') || hasPermission(programId, 'edit');
     }
-    return !hasPermission(programId, action);
+    return hasPermission(programId, pbAction);
+  };
+
+  // UI Helper
+  const isVisible = (action) => {
+    if (!isSheetActive) return false;
+    return isActionVisible(programId, action);
+  };
+
+  const isEnabled = (action) => {
+    if (!isSheetActive) return false;
+    return isActionEnabled({
+      programId,
+      action,
+      sheetState,
+      hasPermission: _checkPermission(action),
+      selectedRecord
+    });
   };
   
   // 🛸 菜單下拉控制狀態
   const [openMenu, setOpenMenu] = useState(null);
   const menubarRef = useRef(null);
 
-  // 外部點擊自動關閉菜單機制
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menubarRef.current && !menubarRef.current.contains(event.target)) {
@@ -62,7 +89,7 @@ export default function Navbar({
   return (
     <div className="win32-header-stack">
       
-      {/* 1. 主標題橫欄 (高階智慧鞋業) */}
+      {/* 1. 主標題橫欄 */}
       <div className="win32-titlebar">
         <div className="titlebar-left">
           <span className="app-icon-img">👟</span>
@@ -75,7 +102,7 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* 2. 系統物理選單列 - 現已活化支援 Dropdown 互動 (底層重要部件) */}
+      {/* 2. 系統物理選單列 */}
       <div className="win32-menubar" ref={menubarRef}>
         
         {/* 選單一：系統設置 */}
@@ -87,25 +114,8 @@ export default function Navbar({
                 <span>系統導航</span>
                 <span className="shortcut">Alt+N</span>
               </div>
-              <div className="dropdown-row" onClick={() => handleMenuAction('navigate')}>
-                <span>導航圖</span>
-              </div>
               <div className="dropdown-divider"></div>
-              <div className="dropdown-row">
-                <span>公司資訊</span>
-              </div>
-              <div className="dropdown-row">
-                <span>系統參數</span>
-              </div>
-              <div className="dropdown-divider"></div>
-              <div className="dropdown-row">
-                <span>重連資料庫</span>
-              </div>
-              <div className="dropdown-row">
-                <span>切換用戶</span>
-              </div>
-              <div className="dropdown-divider"></div>
-              <div className="dropdown-row" style={{ color: '#ef4444' }}>
+              <div className="dropdown-row" style={{ color: '#ef4444' }} onClick={logout}>
                 <span>退出系統</span>
                 <span className="shortcut">Alt+F4</span>
               </div>
@@ -118,65 +128,57 @@ export default function Navbar({
           <span className="menu-item" onClick={() => toggleMenu('op')}>操作(O)</span>
           {openMenu === 'op' && (
             <div className="menu-dropdown">
-              <div className="dropdown-row" onClick={() => !isBtnDisabled('search') && handleMenuAction(null, 'retrieve')}>
-                <span style={{ opacity: isBtnDisabled('search') ? 0.5 : 1 }}>查詢當前頁面</span>
-                <span className="shortcut">F3</span>
-              </div>
-              <div className="dropdown-row" onClick={() => !isBtnDisabled('new') && handleMenuAction(null, 'insert')}>
-                <span style={{ opacity: isBtnDisabled('new') ? 0.5 : 1 }}>新增記錄 (增行)</span>
-                <span className="shortcut">F5</span>
-              </div>
-              <div className="dropdown-row" onClick={() => !isBtnDisabled('delete') && handleMenuAction(null, 'delete')}>
-                <span style={{ opacity: isBtnDisabled('delete') ? 0.5 : 1 }}>刪除記錄 (刪行)</span>
-                <span className="shortcut">F6</span>
-              </div>
+              {isVisible('retrieve') && (
+                <div className="dropdown-row" onClick={() => isEnabled('retrieve') && handleMenuAction(null, 'retrieve')}>
+                  <span style={{ opacity: isEnabled('retrieve') ? 1 : 0.5 }}>查詢當前頁面</span>
+                  <span className="shortcut">F3</span>
+                </div>
+              )}
+              {isVisible('insert') && (
+                <div className="dropdown-row" onClick={() => isEnabled('insert') && handleMenuAction(null, 'insert')}>
+                  <span style={{ opacity: isEnabled('insert') ? 1 : 0.5 }}>新增記錄 (增行)</span>
+                  <span className="shortcut">F5</span>
+                </div>
+              )}
+              {isVisible('delete') && (
+                <div className="dropdown-row" onClick={() => isEnabled('delete') && handleMenuAction(null, 'delete')}>
+                  <span style={{ opacity: isEnabled('delete') ? 1 : 0.5 }}>刪除記錄 (刪行)</span>
+                  <span className="shortcut">F6</span>
+                </div>
+              )}
               <div className="dropdown-divider"></div>
-              <div className="dropdown-row" onClick={() => !isBtnDisabled('save') && handleMenuAction(null, 'save')}>
-                <span style={{ opacity: isBtnDisabled('save') ? 0.5 : 1 }}>儲存異動 (存檔)</span>
-                <span className="shortcut">Ctrl+S</span>
-              </div>
+              {isVisible('save') && (
+                <div className="dropdown-row" onClick={() => isEnabled('save') && handleMenuAction(null, 'save')}>
+                  <span style={{ opacity: isEnabled('save') ? 1 : 0.5 }}>儲存異動 (存檔)</span>
+                  <span className="shortcut">Ctrl+S</span>
+                </div>
+              )}
+              {isVisible('cancel') && (
+                <div className="dropdown-row" onClick={() => isEnabled('cancel') && handleMenuAction(null, 'cancel')}>
+                  <span style={{ opacity: isEnabled('cancel') ? 1 : 0.5 }}>取消變更</span>
+                  <span className="shortcut">Esc</span>
+                </div>
+              )}
               <div className="dropdown-divider"></div>
-              <div className="dropdown-row">
-                <span>審核單據</span>
-              </div>
-              <div className="dropdown-row">
-                <span>反審單據</span>
-              </div>
+              {isVisible('approve') && (
+                <div className="dropdown-row" onClick={() => isEnabled('approve') && handleMenuAction(null, 'approve')}>
+                  <span style={{ opacity: isEnabled('approve') ? 1 : 0.5 }}>審核單據</span>
+                </div>
+              )}
+              {isVisible('unapprove') && (
+                <div className="dropdown-row" onClick={() => isEnabled('unapprove') && handleMenuAction(null, 'unapprove')}>
+                  <span style={{ opacity: isEnabled('unapprove') ? 1 : 0.5 }}>反審單據</span>
+                </div>
+              )}
             </div>
           )}
-        </div>
-
-        <div className="menu-item-wrapper">
-          <span className="menu-item">資料管理(M)</span>
-        </div>
-        <div className="menu-item-wrapper">
-          <span className="menu-item">統計報表(R)</span>
-        </div>
-
-        {/* 選單三：工具 */}
-        <div className={`menu-item-wrapper ${openMenu === 'tool' ? 'active' : ''}`}>
-          <span className="menu-item" onClick={() => toggleMenu('tool')}>工具(T)</span>
-          {openMenu === 'tool' && (
-            <div className="menu-dropdown">
-              <div className="dropdown-row"><span>個性參數設定</span></div>
-              <div className="dropdown-row"><span>密碼修改</span></div>
-              <div className="dropdown-row"><span>日誌查詢</span></div>
-            </div>
-          )}
-        </div>
-
-        <div className="menu-item-wrapper">
-          <span className="menu-item">視窗(W)</span>
-        </div>
-        <div className="menu-item-wrapper">
-          <span className="menu-item">幫助(H)</span>
         </div>
       </div>
 
-      {/* 3. 全域框架工具列 (整合 Toggle 側欄與物理控制) */}
+      {/* 3. 全域框架工具列 */}
       <div className="win32-toolbar">
         
-        {/* 🛰️ 系統導航 Toggle 側欄開關 (完全落實您的提示要求) */}
+        {/* 🛰️ 系統導航 Toggle 側欄開關 */}
         <button 
           className={`toolbar-btn ${isSidebarCollapsed ? '' : 'active'}`} 
           onClick={onToggleSidebar}
@@ -200,118 +202,127 @@ export default function Navbar({
         <div className="toolbar-separator" />
 
         {/* 核心物理 CRUD 操作 */}
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('search')}
-          onClick={() => onDispatchCommand('retrieve')}
-          title="檢索資料 (F3)"
-        >
-          <div className="icon-frame"><Search size={16} color={!isBtnDisabled('search') ? "#ea580c" : "#94a3b8"}/></div>
-          <span className="btn-label">查詢</span>
-        </button>
+        {isVisible('retrieve') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('retrieve')}
+            onClick={() => onDispatchCommand('retrieve')}
+            title="檢索資料 (F3)"
+          >
+            <div className="icon-frame"><Search size={16} color={isEnabled('retrieve') ? "#ea580c" : "#94a3b8"}/></div>
+            <span className="btn-label">查詢</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('edit')}
-          onClick={() => onDispatchCommand('edit')}
-          title="開啟編輯模式 (連點兩下也可編輯)"
-        >
-          <div className="icon-frame"><Edit3 size={16} color={!isBtnDisabled('edit') ? "#2563eb" : "#94a3b8"}/></div>
-          <span className="btn-label">編輯</span>
-        </button>
+        {isVisible('edit') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('edit')}
+            onClick={() => onDispatchCommand('edit')}
+            title="開啟編輯模式 (連點兩下也可編輯)"
+          >
+            <div className="icon-frame"><Edit3 size={16} color={isEnabled('edit') ? "#2563eb" : "#94a3b8"}/></div>
+            <span className="btn-label">編輯</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('new')}
-          onClick={() => onDispatchCommand('insert')}
-          title="新增一筆空白行 (F5)"
-        >
-          <div className="icon-frame"><PlusSquare size={16} color={!isBtnDisabled('new') ? "#16a34a" : "#94a3b8"}/></div>
-          <span className="btn-label">增行</span>
-        </button>
+        {isVisible('insert') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('insert')}
+            onClick={() => onDispatchCommand('insert')}
+            title="新增一筆空白行 (F5)"
+          >
+            <div className="icon-frame"><PlusSquare size={16} color={isEnabled('insert') ? "#16a34a" : "#94a3b8"}/></div>
+            <span className="btn-label">增行</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('delete')}
-          onClick={() => onDispatchCommand('delete')}
-          title="刪除當前行 (F6)"
-        >
-          <div className="icon-frame"><Trash2 size={16} color={!isBtnDisabled('delete') ? "#dc2626" : "#94a3b8"}/></div>
-          <span className="btn-label">刪行</span>
-        </button>
+        {isVisible('delete') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('delete')}
+            onClick={() => onDispatchCommand('delete')}
+            title="刪除當前行 (F6)"
+          >
+            <div className="icon-frame"><Trash2 size={16} color={isEnabled('delete') ? "#dc2626" : "#94a3b8"}/></div>
+            <span className="btn-label">刪行</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('save')}
-          onClick={() => onDispatchCommand('save')}
-          title="存檔寫入 (Ctrl+S)"
-        >
-          <div className="icon-frame"><Save size={16} color={!isBtnDisabled('save') ? "#eab308" : "#94a3b8"}/></div>
-          <span className="btn-label">儲存</span>
-        </button>
+        {isVisible('save') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('save')}
+            onClick={() => onDispatchCommand('save')}
+            title="存檔寫入 (Ctrl+S)"
+          >
+            <div className="icon-frame"><Save size={16} color={isEnabled('save') ? "#eab308" : "#94a3b8"}/></div>
+            <span className="btn-label">儲存</span>
+          </button>
+        )}
 
-        <div className="toolbar-separator" />
-
-        {/* 🌟 新增 DataWindow 標準底層輔助物理按鈕 */}
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('search')}
-          onClick={() => onDispatchCommand('retrieve')}
-          title="重整重新整理"
-        >
-          <div className="icon-frame"><RefreshCw size={16} color={!isBtnDisabled('search') ? "#0891b2" : "#94a3b8"}/></div>
-          <span className="btn-label">重整</span>
-        </button>
-
-        <button 
-          className="toolbar-btn" 
-          disabled={!isSheetActive}
-          title="數據資料排序"
-        >
-          <div className="icon-frame"><ArrowDownAZ size={16} color={isSheetActive ? "#4f46e5" : "#94a3b8"}/></div>
-          <span className="btn-label">排序</span>
-        </button>
-
-        <button 
-          className="toolbar-btn" 
-          disabled={!isSheetActive}
-          title="數據過濾防呆"
-        >
-          <div className="icon-frame"><Filter size={16} color={isSheetActive ? "#0d9488" : "#94a3b8"}/></div>
-          <span className="btn-label">過濾</span>
-        </button>
+        {isVisible('cancel') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('cancel')}
+            onClick={() => onDispatchCommand('cancel')}
+            title="放棄變更 (Esc)"
+          >
+            <div className="icon-frame"><RefreshCw size={16} color={isEnabled('cancel') ? "#9333ea" : "#94a3b8"}/></div>
+            <span className="btn-label">取消</span>
+          </button>
+        )}
 
         <div className="toolbar-separator" />
 
-        {/* 審核與輸出 */}
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('check')} 
-          onClick={() => onDispatchCommand('approve')}
-          title="單據送出審核"
-        >
-          <div className="icon-frame"><CheckSquare size={16} color={!isBtnDisabled('check') ? "#6366f1" : "#94a3b8"}/></div>
-          <span className="btn-label">審核</span>
-        </button>
+        {/* 🌟 審核與輸出 */}
+        {isVisible('approve') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('approve')} 
+            onClick={() => onDispatchCommand('approve')}
+            title="單據送出審核"
+          >
+            <div className="icon-frame"><CheckSquare size={16} color={isEnabled('approve') ? "#6366f1" : "#94a3b8"}/></div>
+            <span className="btn-label">審核</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('excel')} 
-          onClick={() => onDispatchCommand('export')}
-          title="匯出試算表"
-        >
-          <div className="icon-frame"><FileSpreadsheet size={16} color={!isBtnDisabled('excel') ? "#0f766e" : "#94a3b8"}/></div>
-          <span className="btn-label">Excel</span>
-        </button>
+        {isVisible('unapprove') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('unapprove')} 
+            onClick={() => onDispatchCommand('unapprove')}
+            title="反審核單據"
+          >
+            <div className="icon-frame"><CheckSquare size={16} color={isEnabled('unapprove') ? "#ef4444" : "#94a3b8"}/></div>
+            <span className="btn-label">反審</span>
+          </button>
+        )}
 
-        <button 
-          className="toolbar-btn" 
-          disabled={isBtnDisabled('print')}
-          onClick={() => onDispatchCommand('print')}
-        >
-          <div className="icon-frame"><Printer size={16} color={!isBtnDisabled('print') ? "#475569" : "#94a3b8"}/></div>
-          <span className="btn-label">列印</span>
-        </button>
+        {isVisible('export') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('export')} 
+            onClick={() => onDispatchCommand('export')}
+            title="匯出試算表"
+          >
+            <div className="icon-frame"><FileSpreadsheet size={16} color={isEnabled('export') ? "#0f766e" : "#94a3b8"}/></div>
+            <span className="btn-label">Excel</span>
+          </button>
+        )}
+
+        {isVisible('print') && (
+          <button 
+            className="toolbar-btn" 
+            disabled={!isEnabled('print')}
+            onClick={() => onDispatchCommand('print')}
+          >
+            <div className="icon-frame"><Printer size={16} color={isEnabled('print') ? "#475569" : "#94a3b8"}/></div>
+            <span className="btn-label">列印</span>
+          </button>
+        )}
 
         <div style={{ flex: 1 }} />
 

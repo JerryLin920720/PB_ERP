@@ -2,6 +2,8 @@ import React from 'react';
 import { Table, Form, Spin, Card } from 'antd';
 import ERPSheetPage from '../shell/ERPSheetPage';
 import useSingleTableCrud from '../../../hooks/useSingleTableCrud';
+import { useEffect } from 'react';
+import { SHEET_STATE } from '../../../config/programRegistry';
 
 /**
  * createGridFormSheet - 工廠函數，用於建立標準的 SingleTableSheet-GridForm (上 Grid 下 Form 佈局)
@@ -75,11 +77,36 @@ export default function createGridFormSheet(config) {
       selectedRow,
       isEditing,
       loading,
+      isDirty,
+      setIsDirty,
       handleSelectRow,
       setIsEditing
     } = crud;
 
     const selectedRowKey = selectedRow ? selectedRow[rowKey] : null;
+
+    // 監聽狀態並廣播給 Navbar
+    useEffect(() => {
+      let currentState = SHEET_STATE.BROWSE;
+      const isDirty = crud.isDirty; // useSingleTableCrud 需要暴露 isDirty 或是用 isEditing 判斷
+      if (isEditing) {
+        currentState = selectedRow ? SHEET_STATE.EDIT : SHEET_STATE.NEW;
+      }
+
+      window.dispatchEvent(new CustomEvent('mdi-sheet-state-change', {
+        detail: {
+          tabId: sheetId,
+          programId: sheetId,
+          state: currentState,
+          dirty: isDirty,
+          selectedCount: selectedRow ? 1 : 0,
+          approved: selectedRow?.is_approved === 'Y',
+          readonly: false,
+          selectedRecord: selectedRow
+        }
+      }));
+    }, [isEditing, selectedRow, sheetId, crud.isDirty]);
+
 
     // 行選取配置
     const rowSelection = {
@@ -155,6 +182,7 @@ export default function createGridFormSheet(config) {
                 layout="vertical"
                 disabled={!isEditing || !selectedRow}
                 onValuesChange={(changedValues, allValues) => {
+                  setIsDirty(true);
                   if (onValuesChange) {
                     onValuesChange(changedValues, allValues, form);
                   }

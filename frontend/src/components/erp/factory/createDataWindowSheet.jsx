@@ -35,7 +35,7 @@ export default function createDataWindowSheet({
         title={title}
         breadcrumb={breadcrumb}
       >
-        <Win32DataWindow
+        <Win32DataWindow enableSheetState={true}
           sheetId={sheetId}
           apiUrl={apiUrl}
           title={title}

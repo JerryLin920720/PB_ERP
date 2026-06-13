@@ -790,6 +790,7 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
   sheetId: 'dp030',
   title: '樣品單資料管理',
   breadcrumb: ['開發管理', '樣品單資料管理'],
+  enableSheetState: true,
 
   mainClassName: 'dp030-main-scroll',
   layout: {

@@ -73,7 +73,7 @@ import Sa001Sheet from './v2_views/Sa001Sheet';
 import Sa005Sheet from './v2_views/Sa005Sheet';
 import Sa006Sheet from './v2_views/Sa006Sheet';
 import Sa007Sheet from './v2_views/Sa007Sheet';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { X } from 'lucide-react';
 import useAuth from './auth/useAuth';
 import LoginPage from './pages/LoginPage';
@@ -88,10 +88,39 @@ function App() {
     { id: 'navigation', title: '系統導航', closable: false }
   ]);
   const [activeTabId, setActiveTabId] = useState('navigation');
+  const [tabStates, setTabStates] = useState({});
 
   React.useEffect(() => {
     console.log('[App Debug] activeTabId changed to:', activeTabId);
   }, [activeTabId]);
+
+  React.useEffect(() => {
+    const handleSheetStateChange = (e) => {
+      const { tabId, state, dirty, dirtyReason, lastSavedAt, selectedCount, approved, readonly, selectedRecord } = e.detail;
+      if (!tabId) return;
+      setTabStates(prev => ({
+        ...prev,
+        [tabId]: { state, dirty, dirtyReason, lastSavedAt, selectedCount, approved, readonly, selectedRecord }
+      }));
+    };
+    window.addEventListener('mdi-sheet-state-change', handleSheetStateChange);
+    return () => window.removeEventListener('mdi-sheet-state-change', handleSheetStateChange);
+  }, []);
+
+
+  // 實作全域 beforeunload 防呆
+  React.useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // 檢查是否有任何 tab 是 dirty
+      const hasDirtyTab = Object.values(tabStates).some(state => state.dirty === true);
+      if (hasDirtyTab) {
+        e.preventDefault();
+        e.returnValue = ''; // 標準作法，瀏覽器會顯示自己的提示
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tabStates]);
 
   // 🛰️ 側欄折疊與展開狀態 (底層必備框架控制)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -164,18 +193,48 @@ function App() {
   }, [handleOpenSheet]);
 
   // 關閉分頁邏輯
-  const handleCloseTab = (e, sheetId) => {
-    e.stopPropagation(); // 阻斷 Click Bubbling
+  const performCloseTab = (sheetId) => {
     const index = tabs.findIndex(t => t.id === sheetId);
     if (index < 0) return;
 
     const updatedTabs = tabs.filter(t => t.id !== sheetId);
     setTabs(updatedTabs);
+    setTabStates(prev => {
+      const next = { ...prev };
+      delete next[sheetId];
+      return next;
+    });
 
     // 如果關閉的是當前啟動分頁，自動聚焦隔壁頁籤
     if (activeTabId === sheetId) {
       const newActiveIndex = Math.min(index, updatedTabs.length - 1);
-      setActiveTabId(updatedTabs[newActiveIndex].id);
+      if (updatedTabs[newActiveIndex]) {
+        setActiveTabId(updatedTabs[newActiveIndex].id);
+      } else {
+        setActiveTabId('navigation');
+      }
+    }
+  };
+
+  const handleCloseTab = (e, sheetId) => {
+    e.stopPropagation(); // 阻斷 Click Bubbling
+    
+    // 檢查該 tab 是否有未儲存變更
+    const isDirty = tabStates[sheetId]?.dirty;
+    
+    if (isDirty) {
+      Modal.confirm({
+        title: '確定要關閉此作業嗎？',
+        content: `此作業 [${sheetId.toUpperCase()}] 有未儲存的變更，關閉後將遺失這些變更。`,
+        okText: '放棄變更並關閉',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => {
+          performCloseTab(sheetId);
+        }
+      });
+    } else {
+      performCloseTab(sheetId);
     }
   };
 
@@ -223,6 +282,13 @@ function App() {
         activeTabId={activeTabId}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        currentSheetState={tabStates[activeTabId] || {
+          state: 'browse',
+          dirty: false,
+          selectedCount: 1,
+          approved: false,
+          readonly: false
+        }}
       />
 
       {/* Main Body Container */}

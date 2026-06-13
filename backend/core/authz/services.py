@@ -18,8 +18,6 @@ def normalize_action(action: str) -> str:
         return 'search'
     elif act in ('append', 'insert', 'cut', 'undo', 'cross'):
         return 'edit'
-    elif act == 'recheck':
-        return 'check'
     elif act == 'prints':
         return 'print'
     elif act == 'xcopy':
@@ -115,6 +113,7 @@ def has_program_permission(account, permission_key, action, *, strict_backend=Fa
     ).first()
 
     if not popedom or not popedom.prg_popedom:
+        print(f"DEBUG: No popedom found for {account.accounts_id} on {permission_key}")
         return False
 
     # 讀取 13 位元遮罩 (PB 為 1-based, Python 為 0-based)
@@ -126,8 +125,10 @@ def has_program_permission(account, permission_key, action, *, strict_backend=Fa
             f"SysPopedom index {popedom_index} out of range for user {account.accounts_id} on {permission_key}"
         )
         return False
-
-    return popedom.prg_popedom[idx] == '1'
+        
+    result = popedom.prg_popedom[idx] == 'Y'
+    print(f"DEBUG: has_program_permission {account.accounts_id} {permission_key} {action} -> {result} (idx={idx}, char={popedom.prg_popedom[idx]})")
+    return result
 
 
 def has_menu_permission(account, permission_key) -> bool:
@@ -151,134 +152,6 @@ def has_menu_permission(account, permission_key) -> bool:
 
     # 只要 13 位元中任何一位有 '1' 即可顯示選單
     return '1' in popedom.prg_popedom
-
-
-def build_permission_map(account) -> dict:
-    """
-    解析使用者的 sys_popedom 遮罩，組裝成各作業按鈕的操作權限 JSON 對照表。
-    """
-    perm_map = {}
-    if not account:
-        return perm_map
-
-    # 1. 一次性加載所有權限描述字典與使用者操作權限，以降低 DB 訪問負載
-    all_descs = SysPopedomDesc.objects.all()
-    user_popedoms = SysPopedom.objects.filter(accounts_id=account.accounts_id, flag='10')
-
-    # 按作業分類 descriptions
-    descs_by_obj = defaultdict(list)
-    for desc in all_descs:
-        descs_by_obj[desc.obj_name].append(desc)
-
-    # 快速檢索使用者遮罩
-    popedom_by_obj = {p.obj_name: p.prg_popedom for p in user_popedoms}
-    
-    is_user_admin = is_admin(account)
-
-    for obj_name, descs in descs_by_obj.items():
-        perm_map[obj_name] = {}
-        user_bitmask = popedom_by_obj.get(obj_name, "")
-
-        for desc in descs:
-            if is_user_admin:
-                perm_map[obj_name][desc.popedom_id] = True
-            else:
-                idx = desc.popedom_index - 1
-                if idx >= 0 and idx < len(user_bitmask):
-                    perm_map[obj_name][desc.popedom_id] = (user_bitmask[idx] == '1')
-                else:
-                    perm_map[obj_name][desc.popedom_id] = False
-                    
-    return perm_map
-
-
-def build_menu_tree(account) -> list:
-    """
-    讀取 SysMenu，過濾出該使用者有權限之選單，以樹狀層級結構回傳。
-    資料夾底下若無可見子作業，則會自動剪枝 (Pruning)。
-    """
-    if not account:
-        return []
-
-    # 1. 讀取所有選單項目
-    menus = SysMenu.objects.all().order_by('prg_serialno')
-    is_user_admin = is_admin(account)
-
-    # 2. 獲取非管理員用戶的所有選單可見性標記
-    allowed_objs = set()
-    if not is_user_admin:
-        popedoms = SysPopedom.objects.filter(accounts_id=account.accounts_id, flag='1')
-        for p in popedoms:
-            if p.prg_popedom and '1' in p.prg_popedom:
-                allowed_objs.add(p.obj_name)
-
-    # 3. 建立平鋪對照表
-    menu_dict = {}
-    roots = []
-
-    for m in menus:
-        if not m.prg_code:
-            continue
-            
-        node = {
-            "prg_code": m.prg_code,
-            "parent_code": m.parent_code,
-            "fram_class": m.fram_class,
-        }
-
-        if m.fram_class == '1':  # 作業項目 (Leaf Node)
-            # 檢查選單權限
-            if not is_user_admin and m.obj_name not in allowed_objs:
-                continue
-            node.update({
-                "routeKey": m.prg_code.lower(),
-                "programCode": m.prg_code,
-                "permissionKey": m.obj_name,
-                "label": m.prg_name or m.chinesebigname or m.englishname,
-                "path": f"/{m.prg_code.lower()}"
-            })
-        else:  # 目錄夾 (Folder Node)
-            node.update({
-                "label": m.prg_name or m.chinesebigname or m.englishname,
-                "children": []
-            })
-
-        menu_dict[m.prg_code] = node
-
-    # 4. 組裝父子層級關係
-    for prg_code, node in list(menu_dict.items()):
-        parent_code = node["parent_code"]
-        if parent_code and parent_code in menu_dict:
-            parent_node = menu_dict[parent_code]
-            if "children" in parent_node:
-                parent_node["children"].append(node)
-        else:
-            roots.append(node)
-
-    # 5. 遞迴清空無子節點之資料夾 (剪枝)
-    def prune(nodes):
-        pruned = []
-        for n in nodes:
-            if n["fram_class"] == '1':
-                # 僅保留向前端公開的格式
-                pruned.append({
-                    "routeKey": n["routeKey"],
-                    "programCode": n["programCode"],
-                    "permissionKey": n["permissionKey"],
-                    "label": n["label"],
-                    "path": n["path"]
-                })
-            else:
-                # 目錄處理
-                n["children"] = prune(n["children"])
-                if n["children"]:
-                    pruned.append({
-                        "label": n["label"],
-                        "children": n["children"]
-                    })
-        return pruned
-
-    return prune(roots)
 
 
 def model_has_field(model_or_instance, field_name) -> bool:
@@ -349,62 +222,3 @@ def get_current_es101gkey(request):
     raise PermissionDenied("無法為當前使用者帳號找到對應的員工資訊 (es101gkey)。請聯繫系統管理員。")
 
 
-def apply_create_audit_fields(data_or_instance, request, model_cls=None):
-    from django.utils import timezone
-    account = get_current_sys_account(request)
-    username = account.accounts_id if account else (request.user.username if request.user and request.user.is_authenticated else 'ADMIN')
-    user_gkey = account.gkey if account else 'ADMIN'
-    
-    es101gkey = get_current_es101gkey(request)
-    now = timezone.now()
-
-    audit_values = {
-        'es101gkey': es101gkey,
-        'createuser': username,
-        'creategkey': user_gkey,
-        'createdate': now,
-        'modifyuser': username,
-        'modifygkey': user_gkey,
-        'modifydate': now,
-        'inputdate': now,
-        'modifier': username,
-        'modifieddate': now
-    }
-
-    if isinstance(data_or_instance, dict):
-        for field, val in audit_values.items():
-            if model_cls and not model_has_field(model_cls, field):
-                continue
-            data_or_instance[field] = val
-    else:
-        for field, val in audit_values.items():
-            if model_has_field(data_or_instance, field):
-                setattr(data_or_instance, field, val)
-    return data_or_instance
-
-
-def apply_update_audit_fields(data_or_instance, request, model_cls=None):
-    from django.utils import timezone
-    account = get_current_sys_account(request)
-    username = account.accounts_id if account else (request.user.username if request.user and request.user.is_authenticated else 'ADMIN')
-    user_gkey = account.gkey if account else 'ADMIN'
-    now = timezone.now()
-
-    audit_values = {
-        'modifyuser': username,
-        'modifygkey': user_gkey,
-        'modifydate': now,
-        'modifier': username,
-        'modifieddate': now
-    }
-
-    if isinstance(data_or_instance, dict):
-        for field, val in audit_values.items():
-            if model_cls and not model_has_field(model_cls, field):
-                continue
-            data_or_instance[field] = val
-    else:
-        for field, val in audit_values.items():
-            if model_has_field(data_or_instance, field):
-                setattr(data_or_instance, field, val)
-    return data_or_instance

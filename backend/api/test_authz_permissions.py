@@ -9,9 +9,9 @@ from core.authz.services import (
     get_permission_index,
     has_program_permission,
     has_menu_permission,
-    build_permission_map,
-    build_menu_tree,
 )
+
+from api.modules.sys.views import build_permission_map, build_menu_tree
 
 class AuthzPermissionsTests(APITestCase):
     @classmethod

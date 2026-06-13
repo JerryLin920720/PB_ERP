@@ -3,6 +3,7 @@ import { Table, Form, Spin, Button, Space, Tabs } from 'antd';
 import ERPSheetPage from '../shell/ERPSheetPage';
 import ERPRecordWorkbenchLayout from '../layout/ERPRecordWorkbenchLayout';
 import useRecordWorkbenchCrud from '../../../hooks/useRecordWorkbenchCrud';
+import useItemChanged from '../../../hooks/useItemChanged';
 
 const { TabPane } = Tabs;
 
@@ -41,6 +42,7 @@ export default function createRecordWorkbenchSheet(config) {
     renderMasterForm,
     // Sidebar config — title and display text function
     sidebar: sidebarConfig = {},
+    enableSheetState = false,
   } = config;
 
   const sidebarTitle = sidebarConfig.title || '資料列表';
@@ -54,6 +56,22 @@ export default function createRecordWorkbenchSheet(config) {
   return function RecordWorkbenchSheet() {
     const [searchForm] = Form.useForm();
     const [masterForm] = Form.useForm();
+
+        const { applyRules, getRules } = useItemChanged(sheetId);
+    
+    const handleValuesChange = (changed, allValues) => {
+      const masterRules = getRules('master');
+      if (masterRules && masterRules.length > 0) {
+        const newVals = applyRules(changed, allValues, masterRules);
+        if (newVals) {
+          masterForm.setFieldsValue(newVals);
+          Object.entries(newVals).forEach(([k, v]) => {
+            if (k in changed) return; // already updated
+            updateMasterField(k, v);
+          });
+        }
+      }
+    };
 
     const crud = useRecordWorkbenchCrud({
       sheetId,
@@ -73,6 +91,7 @@ export default function createRecordWorkbenchSheet(config) {
       buildDeepSavePayload,
       afterSave,
       form: masterForm,
+      enableSheetState,
     });
 
     const {
@@ -233,10 +252,13 @@ export default function createRecordWorkbenchSheet(config) {
         layout="vertical"
         size="small"
         disabled={!isEditing}
-        onValuesChange={(changed) => {
+        onValuesChange={(changed, allValues) => {
           Object.entries(changed).forEach(([k, v]) => {
             updateMasterField(k, v);
           });
+          if (handleValuesChange) {
+            handleValuesChange(changed, allValues);
+          }
         }}
       >
         <div className="erp-rw-section-header">主檔資料</div>

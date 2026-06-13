@@ -15,7 +15,8 @@ export default function ERPLookupModal({
   onSelect,
   apiBase = '',
   queryParams = {},
-  title
+  title,
+  lookupConfig
 }) {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -25,7 +26,7 @@ export default function ERPLookupModal({
   const [selectedRecord, setSelectedRecord] = useState(null);
 
   // 取得註冊設定
-  const config = lookupRegistry[type];
+  const config = lookupConfig || lookupRegistry[type];
 
   // Compute modalTitle based on priority:
   // 1. prop title (field-level override)

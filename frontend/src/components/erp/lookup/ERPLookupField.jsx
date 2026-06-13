@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Select, Spin } from 'antd';
+import { Select, Spin, message } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import ERPLookupModal from './ERPLookupModal';
@@ -33,8 +33,13 @@ export default function ERPLookupField({
   onChange,
   placeholder = '下拉搜尋 或 雙擊 F2 檢索...',
   disabled = false,
+  readOnly = false,
   apiBase = '',
+  form,
+  returnFields,
+  lookupConfig,
   queryParams = {},
+  contextValues = {},
   className = '',
   title,
   lookupTitle,
@@ -43,23 +48,61 @@ export default function ERPLookupField({
   const [modalVisible, setModalVisible] = useState(false);
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const config = lookupRegistry[type];
+  // 整合 lookupConfig (優先順序: props.lookupConfig > programRegistry > lookupRegistry)
+  const config = lookupConfig || lookupRegistry[type];
   const selectRef = useRef(null);
 
   const serializedQueryParams = useMemo(() => JSON.stringify(queryParams || {}), [queryParams]);
   const queryParamsMemo = useMemo(() => JSON.parse(serializedQueryParams), [serializedQueryParams]);
 
+  // 處理 cascading (dependsOn) 邏輯
+  const getDynamicQueryParams = useCallback(() => {
+    if (!config || !config.dependsOn) return { params: {}, missingRequired: null };
+
+    const deps = Array.isArray(config.dependsOn) ? config.dependsOn : [config.dependsOn];
+    const dynamicParams = {};
+    let missingRequired = null;
+
+    for (const dep of deps) {
+      let val = undefined;
+      // 依序嘗試從 contextValues, form 取值
+      if (contextValues && contextValues[dep.sourceField] !== undefined) {
+        val = contextValues[dep.sourceField];
+      } else if (form) {
+        val = form.getFieldValue(dep.sourceField);
+      }
+
+      if (val !== undefined && val !== null && val !== '') {
+        dynamicParams[dep.queryParam || dep.sourceField] = val;
+      } else if (dep.required) {
+        missingRequired = dep.message || `請先選擇/輸入 ${dep.sourceField} 的值`;
+        break;
+      }
+    }
+
+    return { params: dynamicParams, missingRequired };
+  }, [config, contextValues, form]);
+
+  const dynamicQueryParams = getDynamicQueryParams().params;
+  const missingRequired = getDynamicQueryParams().missingRequired;
+
+  const finalQueryParams = useMemo(() => ({
+    ...queryParamsMemo,
+    ...dynamicQueryParams
+  }), [queryParamsMemo, JSON.stringify(dynamicQueryParams)]);
+
+
   // Reset options cache when queryParams change
   useEffect(() => {
     setOptions([]);
-  }, [serializedQueryParams]);
+  }, [serializedQueryParams, JSON.stringify(dynamicQueryParams)]);
 
   // Fetch initial option dynamically if value is set but not in current options
   const fetchSingleOption = useCallback(async (val) => {
     if (!config || !val || String(val).startsWith('temp_')) return;
     try {
       const url = `${getFullUrl(config.apiUrl)}${val}/`;
-      const res = await axios.get(url, { params: queryParamsMemo });
+      const res = await axios.get(url, { params: finalQueryParams });
       if (res.data) {
         const label = res.data[config.displayField] || val;
         setOptions((prev) => {
@@ -70,14 +113,15 @@ export default function ERPLookupField({
     } catch (e) {
       console.warn(`Failed to fetch lookup display value for ${val}:`, e);
     }
-  }, [config, queryParamsMemo]);
+  }, [config, finalQueryParams]);
 
   // Load dynamic list (top 50)
   const fetchOptions = useCallback(async (search = '') => {
     if (!config) return;
+    if (getDynamicQueryParams().missingRequired) return;
     setLoading(true);
     try {
-      const params = { ...queryParamsMemo };
+      const params = { ...finalQueryParams };
       if (search && config.searchFields && config.searchFields.length > 0) {
         // Simple search query or backend query if supported
         params.search = search;
@@ -97,7 +141,7 @@ export default function ERPLookupField({
     } finally {
       setLoading(false);
     }
-  }, [config, queryParamsMemo]);
+  }, [config, finalQueryParams]);
 
   // Sync initial value
   useEffect(() => {
@@ -112,14 +156,19 @@ export default function ERPLookupField({
   // Trigger modal open
   const handleOpenModal = () => {
     if (disabled) return;
+    if (missingRequired) {
+      message.warning(missingRequired);
+      return;
+    }
     setModalVisible(true);
   };
 
   // Keyboard listener for F2
   const handleKeyDown = (e) => {
-    if (disabled) return;
+    if (disabled || readOnly) return;
     if (e.key === 'F2' || e.keyCode === 113) {
       e.preventDefault();
+      e.stopPropagation();
       handleOpenModal();
     }
   };
@@ -127,7 +176,7 @@ export default function ERPLookupField({
   // Handlers for modal selection
   const handleModalSelect = (record) => {
     setModalVisible(false);
-    if (onChange && config) {
+    if (config) {
       const val = record[config.returnValue || 'gkey'];
       const lbl = record[config.displayField] || val;
       
@@ -136,7 +185,19 @@ export default function ERPLookupField({
         return [...prev, { value: val, label: lbl, record }];
       });
       
-      onChange(val, record);
+      if (form && returnFields && record) {
+        const updates = {};
+        for (const [targetField, sourceField] of Object.entries(returnFields)) {
+          if (record[sourceField] !== undefined) {
+            updates[targetField] = record[sourceField];
+          }
+        }
+        form.setFieldsValue(updates);
+      }
+      
+      if (onChange) {
+        onChange(val, record);
+      }
     }
   };
 
@@ -157,6 +218,7 @@ export default function ERPLookupField({
         disabled={disabled}
         value={value || undefined}
         onSearch={fetchOptions}
+        onInputKeyDown={handleKeyDown}
         onFocus={() => {
           if (options.length <= 1) {
             fetchOptions();
@@ -167,10 +229,20 @@ export default function ERPLookupField({
         }
         onChange={(val) => {
           const selectedOpt = options.find((o) => o.value === val);
-          if (onChange && selectedOpt) {
-            onChange(val, selectedOpt.record);
-          } else if (onChange) {
-            onChange(val, null);
+          const record = selectedOpt ? selectedOpt.record : null;
+          
+          if (form && returnFields && record) {
+            const updates = {};
+            for (const [targetField, sourceField] of Object.entries(returnFields)) {
+              if (record[sourceField] !== undefined) {
+                updates[targetField] = record[sourceField];
+              }
+            }
+            form.setFieldsValue(updates);
+          }
+          
+          if (onChange) {
+            onChange(val, record);
           }
         }}
         suffixIcon={
@@ -200,8 +272,9 @@ export default function ERPLookupField({
         onCancel={() => setModalVisible(false)}
         onSelect={handleModalSelect}
         apiBase={apiBase}
-        queryParams={queryParams}
+        queryParams={finalQueryParams}
         title={title || lookupTitle}
+        lookupConfig={config}
       />
     </div>
   );

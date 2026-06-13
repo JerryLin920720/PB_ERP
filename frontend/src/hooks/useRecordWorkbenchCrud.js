@@ -3,6 +3,8 @@ import axios from 'axios';
 import { message, Modal } from 'antd';
 import useAuth from '../auth/useAuth';
 import { canExecuteCommand } from '../auth/permissionUtils';
+import useSheetState from './useSheetState';
+import { getProgramConfig } from '../config/programRegistry';
 
 /**
  * Helper to resolve absolute API urls.
@@ -151,10 +153,13 @@ export default function useRecordWorkbenchCrud({
   buildDeepSavePayload,
   afterSave,
   form, // AntD form instance passed from UI
+  enableSheetState = false,
 }) {
   const { user, permissions } = useAuth();
   const [mode, setMode] = useState('list'); // 'list' | 'edit'
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isError, setIsError] = useState(false);
 
   // List queries
   const [queryParams, setQueryParams] = useState({});
@@ -166,6 +171,10 @@ export default function useRecordWorkbenchCrud({
   const [activeRecord, setActiveRecord] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isMasterDirty, setIsMasterDirty] = useState(false);
+  
+  // 報表列印狀態
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportDefaultAction, setReportDefaultAction] = useState('preview');
 
   // Detail tabs state map
   const [detailStates, setDetailStates] = useState(() => {
@@ -200,9 +209,88 @@ export default function useRecordWorkbenchCrud({
     );
   }, [isMasterDirty, detailStates]);
 
+  useEffect(() => {
+    if (isDirty) {
+      setIsError(false);
+    }
+  }, [isDirty]);
+
+  // Opt-in 狀態機整合
+  const sheetStateOps = useSheetState(enableSheetState ? { tabId: sheetId, programId: sheetId } : null);
+  const opsRef = useRef(sheetStateOps);
+  useEffect(() => {
+    opsRef.current = sheetStateOps;
+  }, [sheetStateOps]);
+
+  useEffect(() => {
+    if (!enableSheetState || !opsRef.current) return;
+
+    let currentState = 'browse';
+    const isTemp = activeRecord && String(activeRecord[masterKey]).startsWith('temp_');
+
+    if (isSaving || (loading && mode === 'edit' && isEditing && !isTemp && Object.keys(queryParams).length === 0 /* fallback guess if saving flag not precise */ && isSaving)) {
+      currentState = 'saving';
+    } else if (isError) {
+      currentState = 'error';
+    } else if (isTemp || (mode === 'edit' && isEditing && isTemp)) {
+      currentState = 'insert';
+    } else if (mode === 'edit' && isEditing && !isTemp) {
+      currentState = 'edit';
+    } else {
+      // list mode or edit mode without editing
+      currentState = 'browse';
+    }
+
+    let selectedCount = 0;
+    if (mode === 'list') {
+      selectedCount = selectedListRow ? 1 : 0;
+    } else if (mode === 'edit') {
+      selectedCount = activeRecord ? 1 : 0;
+    }
+
+    // 從目前資料列取值
+    const currentRecord = mode === 'edit' ? activeRecord : selectedListRow;
+    
+    const isApproved = currentRecord ? (
+      currentRecord.is_approved === true || currentRecord.is_approved === 'Y' ||
+      currentRecord.approve === true || currentRecord.approve === 'Y' ||
+      currentRecord.capprove === true || currentRecord.capprove === 'Y'
+    ) : false;
+    
+    const isReadOnly = currentRecord ? (currentRecord.readonly === true || currentRecord.readonly === 'Y') : false;
+    const isLocked = currentRecord ? (currentRecord.locked === true || currentRecord.locked === 'Y') : false;
+
+    opsRef.current.setState(currentState);
+    if (opsRef.current.setFlags) {
+      opsRef.current.setFlags({
+        dirty: isDirty,
+        selectedCount,
+        approved: isApproved,
+        readonly: isReadOnly,
+        locked: isLocked
+      });
+    } else {
+      // fallback
+      opsRef.current.markDirty(isDirty);
+      opsRef.current.setSelection(selectedCount);
+    }
+  }, [
+    enableSheetState,
+    mode,
+    isEditing,
+    isDirty,
+    isSaving,
+    isError,
+    activeRecord,
+    selectedListRow,
+    masterKey,
+    loading
+  ]);
+
   // Query/Fetch query list
   const fetchList = useCallback(async (params = queryParams) => {
     if (!api.listUrl) return;
+    setIsError(false);
     setLoading(true);
     try {
       const res = await axios.get(getFullUrl(api.listUrl), { params });
@@ -213,6 +301,7 @@ export default function useRecordWorkbenchCrud({
         setSelectedListRow(null);
       }
     } catch (e) {
+      setIsError(true);
       console.error(e);
       message.error('讀取清單失敗：' + parseDrfError(e, fieldLabels));
     } finally {
@@ -286,6 +375,7 @@ export default function useRecordWorkbenchCrud({
     if (!record) return;
 
     const doOpen = async () => {
+      setIsError(false);
       setLoading(true);
       try {
         const gkeyVal = record[masterKey];
@@ -304,6 +394,7 @@ export default function useRecordWorkbenchCrud({
         }
         await loadDetails(gkeyVal);
       } catch (e) {
+        setIsError(true);
         console.warn('Failed to retrieve full master details:', e);
         // Fallback
         const cloned = formatRecordDates(JSON.parse(JSON.stringify(record)));
@@ -340,15 +431,44 @@ export default function useRecordWorkbenchCrud({
     setSelectedListRow(row);
   }, []);
 
-  const createDefaultMaster = useCallback(() => {
+  const createDefaultMaster = useCallback(async () => {
     const tempKey = `temp_${Date.now()}`;
     const newRecord = typeof createDefaultMasterRow === 'function'
       ? createDefaultMasterRow(tempKey)
       : { [masterKey]: tempKey };
-    const cloned = JSON.parse(JSON.stringify(newRecord));
+    let cloned = JSON.parse(JSON.stringify(newRecord));
+
+    // Try to auto-generate bill number if configured
+    const programId = sheetId ? sheetId.split('-')[0] : null; // e.g. dp030-wb -> dp030
+    const config = programId ? getProgramConfig(programId) : null;
+    const billNoConfig = config?.billNoConfig;
+
+    if (billNoConfig && billNoConfig.enabled && billNoConfig.endpoint) {
+      try {
+        setLoading(true);
+        // We use today's date if no date field is specified, or wait for the user to pick one
+        // Usually, default creation might not have the date yet. The API will default to today.
+        const res = await axios.post(billNoConfig.endpoint, {
+          date: cloned[billNoConfig.dateField] || new Date().toISOString().split('T')[0]
+        });
+        if (res.data && res.data.success) {
+          cloned[billNoConfig.field] = res.data.bill_no;
+        } else {
+          message.warning('取號失敗：' + (res.data?.detail || '未知錯誤'));
+        }
+      } catch (err) {
+        console.warn('Bill No API failed:', err);
+        message.warning('取號失敗，請稍後手動填寫單號');
+      } finally {
+        setLoading(false);
+      }
+    }
 
     if (form) {
       form.resetFields();
+      if (billNoConfig && billNoConfig.enabled && cloned[billNoConfig.field]) {
+         form.setFieldsValue({ [billNoConfig.field]: cloned[billNoConfig.field] });
+      }
     }
     setSelectedRecord(cloned);
     setActiveRecord(cloned);
@@ -538,14 +658,32 @@ export default function useRecordWorkbenchCrud({
       if (typeof validateMasterRow === 'function') {
         validateMasterRow(latestMaster);
       }
+
       if (typeof validateAll === 'function') {
         validateAll(latestMaster, detailStates);
       }
+      
+      // Auto process validationConfig detailRules
+      const programId = sheetId ? sheetId.split('-')[0] : null;
+      if (programId) {
+        const config = getProgramConfig(programId);
+        if (config && config.validationConfig && config.validationConfig.detailRules) {
+          config.validationConfig.detailRules.forEach(rule => {
+            const detailKey = rule.detailKey;
+            const rows = detailStates[detailKey]?.rows || [];
+            if (rule.minRows && rows.length < rule.minRows) {
+              throw new Error(rule.message || `[${detailKey}] 至少需要 ${rule.minRows} 筆資料`);
+            }
+          });
+        }
+      }
+
     } catch (err) {
       message.error(err.message || '驗證欄位失敗');
       return;
     }
 
+    setIsSaving(true);
     setLoading(true);
     try {
       let payload;
@@ -617,8 +755,10 @@ export default function useRecordWorkbenchCrud({
         customMsg = "發送請求失敗: " + error.message;
       }
 
+      setIsError(true);
       message.error('存檔失敗：' + customMsg);
     } finally {
+      setIsSaving(false);
       setLoading(false);
     }
   }, [
@@ -643,6 +783,7 @@ export default function useRecordWorkbenchCrud({
   const handleCancel = useCallback(() => {
     setIsMasterDirty(false);
     setIsEditing(false);
+    setIsError(false);
 
     const isTemp = activeRecord && String(activeRecord[masterKey]).startsWith('temp_');
     if (isTemp) {
@@ -715,16 +856,104 @@ export default function useRecordWorkbenchCrud({
     });
   }, [activeRecord, selectedRecord, masterKey, api.deleteUrl, api.listUrl, fetchList, fieldLabels, form, detailTabsConfig]);
 
+  const handleApprove = useCallback(async () => {
+    if (!activeRecord) return;
+    const keyVal = activeRecord[masterKey];
+    if (!keyVal || (typeof keyVal === 'string' && keyVal.startsWith('temp_'))) {
+      message.warning('請先儲存資料後再進行審核。');
+      return;
+    }
+    const approved = activeRecord.is_approved === true || activeRecord.is_approved === 'Y' || activeRecord.approve === true || activeRecord.approve === 'Y' || activeRecord.capprove === true || activeRecord.capprove === 'Y';
+    if (approved) {
+      message.warning('此單據已處於審核狀態。');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const url = `${api.listUrl}${keyVal}/check/`;
+      const res = await axios.post(url);
+      if (res.data?.success) {
+        message.success('審核成功');
+        await fetchList(queryParams);
+      } else {
+        message.error(res.data?.detail || '審核失敗');
+      }
+    } catch (e) {
+      console.error(e);
+      message.error('審核失敗：' + parseDrfError(e, fieldLabels));
+    } finally {
+      setLoading(false);
+    }
+  }, [activeRecord, masterKey, api.listUrl, fetchList, queryParams, fieldLabels]);
+
+  const handleUnapprove = useCallback(() => {
+    if (!activeRecord) return;
+    const keyVal = activeRecord[masterKey];
+    if (!keyVal || (typeof keyVal === 'string' && keyVal.startsWith('temp_'))) {
+      return;
+    }
+    const approved = activeRecord.is_approved === true || activeRecord.is_approved === 'Y' || activeRecord.approve === true || activeRecord.approve === 'Y' || activeRecord.capprove === true || activeRecord.capprove === 'Y';
+    if (!approved) {
+      message.warning('此單據尚未審核，無法反審。');
+      return;
+    }
+
+    Modal.confirm({
+      title: '反審核確認',
+      content: '確定要取消審核此單據嗎？',
+      okText: '確定',
+      cancelText: '取消',
+      onOk: async () => {
+        setLoading(true);
+        try {
+          const url = `${api.listUrl}${keyVal}/uncheck/`;
+          const res = await axios.post(url);
+          if (res.data?.success) {
+            message.success('反審核成功');
+            await fetchList(queryParams);
+          } else {
+            message.error(res.data?.detail || '反審核失敗');
+          }
+        } catch (e) {
+          console.error(e);
+          message.error('反審核失敗：' + parseDrfError(e, fieldLabels));
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  }, [activeRecord, masterKey, api.listUrl, fetchList, queryParams, fieldLabels]);
+
   // Listen to Global Toolbar Command
   useEffect(() => {
     const handleGlobalCommand = (e) => {
       const { action, targetSheet } = e.detail;
       if (targetSheet === sheetId) {
+        // Map approve/unapprove to check/recheck for permission checks
+        let permAction = action;
+        if (action === 'approve') permAction = 'check';
+        if (action === 'unapprove') permAction = 'recheck';
+
         // 二次權限防呆
-        if (!canExecuteCommand(permissions, sheetId, action, user)) {
+        if (!canExecuteCommand(permissions, sheetId, permAction, user)) {
           message.error(`您無權在此作業執行 [${action}] 操作！`);
           return;
         }
+        
+        // 防呆: dirty / saving / no-selection
+        const hasSelection = mode === 'edit' ? !!activeRecord : !!selectedListRow;
+        if (['approve', 'unapprove', 'edit', 'delete'].includes(action) && !hasSelection) {
+          return;
+        }
+        if (['approve', 'unapprove'].includes(action)) {
+          if (isDirty) {
+            message.warning('目前資料尚未儲存，無法執行此操作！');
+            return;
+          }
+          if (isSaving || loading) return;
+        }
+
         if (action === 'retrieve') {
           console.debug('[RecordWorkbench] command: retrieve');
           console.debug('[RecordWorkbench] retrieve triggered');
@@ -770,19 +999,48 @@ export default function useRecordWorkbenchCrud({
             createDefaultMaster();
           }
         } else if (action === 'edit') {
-          setIsEditing(true);
+          const isApproved = activeRecord && (activeRecord.is_approved === 'Y' || activeRecord.is_approved === true || activeRecord.approve === 'Y' || activeRecord.approve === true || activeRecord.capprove === 'Y' || activeRecord.capprove === true);
+          if (isApproved) {
+            message.warning('此資料已審核，請先反審核後再修改。');
+          } else {
+            setIsEditing(true);
+          }
         } else if (action === 'save') {
-          handleSaveAll();
+          const isApproved = activeRecord && (activeRecord.is_approved === 'Y' || activeRecord.is_approved === true || activeRecord.approve === 'Y' || activeRecord.approve === true || activeRecord.capprove === 'Y' || activeRecord.capprove === true);
+          if (isApproved) {
+            message.warning('此資料已審核，請先反審核後再修改。');
+          } else {
+            handleSaveAll();
+          }
         } else if (action === 'delete') {
-          handleDeleteMaster();
+          const isApproved = activeRecord && (activeRecord.is_approved === 'Y' || activeRecord.is_approved === true || activeRecord.approve === 'Y' || activeRecord.approve === true || activeRecord.capprove === 'Y' || activeRecord.capprove === true);
+          if (isApproved) {
+            message.warning('此資料已審核，請先反審核後再修改。');
+          } else {
+            handleDeleteMaster();
+          }
         } else if (action === 'cancel') {
           handleCancel();
+        } else if (action === 'approve') {
+          handleApprove();
+        } else if (action === 'unapprove') {
+          handleUnapprove();
+        } else if (action === 'print' || action === 'preview' || action === 'export') {
+          const programId = sheetId ? sheetId.split('-')[0] : null;
+          const config = programId ? getProgramConfig(programId) : null;
+          if (!config || !config.reportConfig || !config.reportConfig.enabled) {
+            import('antd').then(antd => antd.message.warning('此作業尚未設定報表列印功能'));
+            return;
+          }
+          setReportDefaultAction(action === 'export' ? 'export' : 'preview');
+          setReportModalVisible(true);
         }
       }
     };
     window.addEventListener('mdi-global-command', handleGlobalCommand);
     return () => window.removeEventListener('mdi-global-command', handleGlobalCommand);
-  }, [sheetId, mode, fetchList, createDefaultMaster, handleSaveAll, handleDeleteMaster, handleCancel, isEditing, isDirty, queryParams]);
+  }, [sheetId, mode, fetchList, createDefaultMaster,
+    handleSaveAll, handleDeleteMaster, handleCancel, isEditing, isDirty, queryParams]);
 
   return {
     mode,
@@ -808,6 +1066,10 @@ export default function useRecordWorkbenchCrud({
     detailStates,
     loadDetails,
     updateDetailRow,
+    
+    reportModalVisible,
+    setReportModalVisible,
+    reportDefaultAction,
     addDetailRow,
     deleteDetailRow,
     replaceDetailRows,

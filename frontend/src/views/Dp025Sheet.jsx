@@ -216,53 +216,70 @@ export default function Dp025Sheet() {
       message.warning('當前無可儲存的型體主檔。');
       return;
     }
+
+    // --- Validation Rules (取代原廠 validationConfig) ---
     if (!selectedStyle.styleno) {
       message.error('【型體號】為必填主鍵！');
       return;
     }
+    if (!selectedStyle.stylename) {
+      message.error('【型體名稱】為必填！');
+      return;
+    }
+    if (!selectedStyle.year) {
+      message.error('【年度】為必填！');
+      return;
+    }
     
+    // Check details validation
+    for (const p of prices) {
+      if (p.price < 0 || p.cost < 0) {
+        message.error('價格明細中的【單價/成本】不可為負數！');
+        return;
+      }
+    }
+    
+    // Lock check
+    if (selectedStyle.confirms === 'Y') {
+      message.error('此筆資料已確認 (Approve Locked)，禁止修改儲存！');
+      return;
+    }
+
     setLoading(true);
     try {
       const isNewMaster = selectedStyle.gkey.startsWith('temp_');
-      const masterPayload = {
-        ...selectedStyle,
-        gkey: isNewMaster ? undefined : selectedStyle.gkey
-      };
       
-      let saveRes;
-      if (isNewMaster) {
-        saveRes = await axios.post(`${API_URL}dp025/`, masterPayload);
-      } else {
-        saveRes = await axios.put(`${API_URL}dp025/${selectedStyle.gkey}/`, masterPayload);
-      }
-      
-      const savedGkey = saveRes.data.gkey;
-      
-      const pricePayload = {
-        upsert: prices.map(p => ({ ...p, dp025gkey: savedGkey, gkey: p.gkey.startsWith('temp_') ? undefined : p.gkey })),
-        delete: deletedPrices
-      };
-      const transferPayload = {
-        upsert: transfers.map(t => ({ ...t, dp025gkey: savedGkey, gkey: t.gkey.startsWith('temp_') ? undefined : t.gkey })),
-        delete: deletedTransfers
-      };
-      const accessoryPayload = {
-        upsert: accessories.map(a => ({ ...a, dp025gkey: savedGkey, gkey: a.gkey.startsWith('temp_') ? undefined : a.gkey })),
-        delete: deletedAccessories
+      // 🚀 DeepSaveMixinV2 Payload Construction
+      const payload = {
+        master: {
+          ...selectedStyle,
+          gkey: isNewMaster ? undefined : selectedStyle.gkey
+        },
+        prices: {
+          upsert: prices.map(p => ({ ...p, gkey: p.gkey.startsWith('temp_') ? undefined : p.gkey })),
+          delete: deletedPrices
+        },
+        tech: {
+          upsert: transfers.map(t => ({ ...t, gkey: t.gkey.startsWith('temp_') ? undefined : t.gkey })),
+          delete: deletedTransfers
+        },
+        accessories: {
+          upsert: accessories.map(a => ({ ...a, gkey: a.gkey.startsWith('temp_') ? undefined : a.gkey })),
+          delete: deletedAccessories
+        }
       };
 
-      await Promise.all([
-        axios.post(`${API_URL}dp026/bulk_save/`, pricePayload),
-        axios.post(`${API_URL}dp027/bulk_save/`, transferPayload),
-        axios.post(`${API_URL}dp028/bulk_save/`, accessoryPayload)
-      ]);
+      // 🔄 一次性呼叫 V2 deep_save (Atomic Transaction)
+      const saveRes = await axios.post(`${API_URL}dp025/deep_save/`, payload);
 
-      message.success('🎉 恭喜！型體基本資料 BOM (Dp025-028) 存檔成功！');
+      message.success('🎉 恭喜！型體基本資料 BOM (Dp025-028) 原子存檔成功！');
       setIsDirty(false);
       doQuery();
-      loadStyleDetails(saveRes.data);
+      // V2 回傳資料通常在 res.data.data
+      const newMasterData = saveRes.data.data ? saveRes.data.data : saveRes.data;
+      loadStyleDetails(newMasterData);
     } catch (err) {
-      message.error('存檔失敗: ' + (err.response?.data?.styleno || err.message));
+      message.error('存檔失敗: ' + (err.response?.data?.detail || err.response?.data?.styleno || err.message));
     } finally {
       setLoading(false);
     }

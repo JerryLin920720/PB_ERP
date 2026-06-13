@@ -6,6 +6,19 @@ import ERPSheetPage from '../components/erp/shell/ERPSheetPage';
 import { useAuth } from '../auth/useAuth';
 import { canExecuteCommand } from '../auth/permissionUtils';
 
+const FIELD_PERMISSION_FALLBACK_COLUMNS = {
+  w_dp030: [
+    { db_name: 'styleno', label: '型體編號 (styleno)' },
+    { db_name: 'stylename', label: '型體名稱 (stylename)' },
+    { db_name: 'logo', label: '商標 (logo)' },
+    { db_name: 'cost', label: '成本 (cost)' },
+    { db_name: 'profit', label: '利潤 (profit)' },
+    { db_name: 'wagescost', label: '工資成本 (wagescost)' },
+    { db_name: 'totalfob', label: '總 FOB (totalfob)' },
+    { db_name: 'managecost', label: '管理費 (managecost)' },
+  ]
+};
+
 export default function Sy005Sheet() {
   const { user, permissions } = useAuth();
   const hisystem = user?.hisystem || '01';
@@ -23,7 +36,20 @@ export default function Sy005Sheet() {
   const [groupsList, setGroupsList] = useState([]);
   const [userGroups, setUserGroups] = useState([]);
   const [matrixRows, setMatrixRows] = useState([]);
+  
+  // Field permissions state (Phase 9B-3)
+  const [fieldPermissions, setFieldPermissions] = useState([]);
+  const [loadingFieldPermissions, setLoadingFieldPermissions] = useState(false);
+  const [selectedFieldProgram, setSelectedFieldProgram] = useState('w_dp030');
 
+  // Constraint permissions state (Phase 9B-4)
+  const [constraintValues, setConstraintValues] = useState([]); // [{cgkey, cname}]
+  const [loadingConstraint, setLoadingConstraint] = useState(false);
+  const [selectedConstraintProgram, setSelectedConstraintProgram] = useState('w_dp030');
+  const [selectedConstraintKeycol, setSelectedConstraintKeycol] = useState('es101gkey');
+  const [selectedConstraintType, setSelectedConstraintType] = useState('in_list');
+  const [es101Options, setEs101Options] = useState([]);
+  const [loadingEs101Options, setLoadingEs101Options] = useState(false);
   // Search filter
   const [userSearchText, setUserSearchText] = useState('');
   const [groupSearchText, setGroupSearchText] = useState('');
@@ -141,11 +167,176 @@ export default function Sy005Sheet() {
       setLoadingMatrix(false);
     }
   }, [hisystem]);
+  // Fetch field permissions
+  const fetchFieldPermissions = useCallback(async (targetObj, program) => {
+    const activeTarget = targetObj || selectedTargetRef.current;
+    if (!activeTarget || activeTarget.is_group) return;
+
+    setLoadingFieldPermissions(true);
+    try {
+      const response = await axios.get(`/api/sys-accounts-column/?accounts_id=${encodeURIComponent(activeTarget.target_id)}&obj_name=${encodeURIComponent(program || selectedFieldProgram)}&hisystem=${hisystem}`);
+      setFieldPermissions(response.data || []);
+      setIsDirty(false);
+    } catch (err) {
+      console.error('Failed to load field permissions:', err);
+      message.error(err.response?.data?.detail || '載入欄位權限失敗');
+      setFieldPermissions([]);
+    } finally {
+      setLoadingFieldPermissions(false);
+    }
+  }, [hisystem, selectedFieldProgram]);
+
+  // Save Field Permissions
+  const handleSaveFieldPermissions = async () => {
+    if (!selectedTarget || selectedTarget.is_group) return;
+
+    // Enforce w_sy005 edit permission guard
+    if (!canExecuteCommand('w_sy005', 'edit', permissions)) {
+      message.error('您沒有權限修改欄位權限設定');
+      return;
+    }
+
+    try {
+      const payload = {
+        accounts_id: selectedTarget.target_id,
+        obj_name: selectedFieldProgram,
+        hisystem: hisystem,
+        columns: fieldPermissions.map(item => ({
+          db_name: item.db_name,
+          kind: item.kind
+        }))
+      };
+
+      await axios.post('/api/sys-accounts-column/batch_save/', payload);
+      message.success('欄位權限儲存成功。請重新登入或重刷頁面以套用最新權限。');
+      setIsDirty(false);
+    } catch (err) {
+      console.error('Failed to save field permissions:', err);
+      message.error(err.response?.data?.detail || '欄位權限儲存失敗');
+    }
+  };
+
+  const handleFieldPermissionChange = (dbName, newKind) => {
+    setIsDirty(true);
+    setFieldPermissions(prev => {
+      const exists = prev.find(p => p.db_name === dbName);
+      if (newKind === 'none') {
+        return prev.filter(p => p.db_name !== dbName);
+      }
+      if (exists) {
+        return prev.map(p => p.db_name === dbName ? { ...p, kind: newKind } : p);
+      }
+      return [...prev, { db_name: dbName, kind: newKind }];
+    });
+  };
+
+  const fetchEs101Options = async () => {
+    try {
+      setLoadingEs101Options(true);
+      const res = await axios.get('/api/es101/');
+      const options = (res.data?.results || res.data || []).map(e => ({
+        label: `${e.employeeno || e.gkey} - ${e.cname || e.username || ''}`,
+        value: e.gkey,
+        cname: e.cname || e.username || e.employeeno || ''
+      }));
+      setEs101Options(options);
+    } catch (err) {
+      console.error('Failed to fetch es101:', err);
+      message.error('無法載入員工清單');
+    } finally {
+      setLoadingEs101Options(false);
+    }
+  };
+
+  const fetchConstraints = async (target = selectedTarget, program = selectedConstraintProgram, keycol = selectedConstraintKeycol) => {
+    if (!target || target.is_group) {
+      setConstraintValues([]);
+      return;
+    }
+    try {
+      setLoadingConstraint(true);
+      const res = await axios.get('/api/sys-constraint/', {
+        params: { accounts_id: target.target_id, obj_name: program, hisystem: hisystem }
+      });
+      const data = res.data;
+      const targetConstraint = data.find(c => c.keycol === keycol);
+      if (targetConstraint) {
+        setConstraintValues(targetConstraint.values || []);
+        setSelectedConstraintType(targetConstraint.constraint_type || 'in_list');
+      } else {
+        setConstraintValues([]);
+        setSelectedConstraintType('in_list');
+      }
+      setIsDirty(false);
+    } catch (err) {
+      console.error('Failed to fetch constraints:', err);
+      message.error('載入資料範圍約束失敗');
+    } finally {
+      setLoadingConstraint(false);
+    }
+  };
+
+  const handleSaveConstraints = async () => {
+    if (!selectedTarget || selectedTarget.is_group) return;
+
+    if (!canExecuteCommand('w_sy005', 'edit', permissions)) {
+      message.error('您沒有權限修改資料範圍約束設定');
+      return;
+    }
+
+    const payload = {
+      hisystem: hisystem,
+      accounts_id: selectedTarget.target_id,
+      obj_name: selectedConstraintProgram,
+      keycol: selectedConstraintKeycol,
+      constraint_type: selectedConstraintType,
+      values: constraintValues
+    };
+
+    const doSave = async () => {
+      try {
+        await axios.post('/api/sys-constraint/batch_save/', payload);
+        message.success('資料範圍約束儲存成功。該限制已立即影響 API 權限。');
+        setIsDirty(false);
+      } catch (err) {
+        console.error('Failed to save constraints:', err);
+        message.error(err.response?.data?.detail || '資料範圍約束儲存失敗');
+      }
+    };
+
+    if (constraintValues.length === 0) {
+      Modal.confirm({
+        title: '你即將清空此帳號的資料範圍限制',
+        icon: <ExclamationCircleOutlined />,
+        content: `清空後，此帳號將不再受 ${selectedConstraintKeycol} 限制，將可看到此作業的全部資料。是否確認？`,
+        okText: '確認清空',
+        cancelText: '取消',
+        onOk: doSave
+      });
+    } else {
+      doSave();
+    }
+  };
+
+  const handleAddConstraintValue = (gkey, cname) => {
+    if (constraintValues.find(v => v.cgkey === gkey)) {
+      message.warning('該允許值已存在');
+      return;
+    }
+    setIsDirty(true);
+    setConstraintValues(prev => [...prev, { cgkey: gkey, cname }]);
+  };
+
+  const handleRemoveConstraintValue = (gkey) => {
+    setIsDirty(true);
+    setConstraintValues(prev => prev.filter(v => v.cgkey !== gkey));
+  };
 
   // Load database lists on mount
   useEffect(() => {
     fetchUsers();
     fetchGroups();
+    fetchEs101Options();
   }, [fetchUsers, fetchGroups]);
 
   // Guard Helper: confirms switching when dirty
@@ -171,19 +362,32 @@ export default function Sy005Sheet() {
   const handleTabChange = (key) => {
     confirmSwitch(() => {
       setActiveTabKey(key);
+      if (key === '4' && selectedTarget && !selectedTarget.is_group) {
+        fetchFieldPermissions(selectedTarget, selectedFieldProgram);
+      }
+      if (key === '5' && selectedTarget && !selectedTarget.is_group) {
+        fetchConstraints(selectedTarget, selectedConstraintProgram, selectedConstraintKeycol);
+      }
     });
   };
 
   // Perform User Selection
   const performSelectUser = (record) => {
     setSelectedUser(record);
-    setSelectedTarget({
+    const target = {
       target_id: record.accounts_id,
       is_group: false,
       label: `${record.accounts_id} / ${record.accounts || ''}`,
       name: record.accounts || ''
-    });
+    };
+    setSelectedTarget(target);
     fetchUserGroups(record.accounts_id);
+    if (activeTabKeyRef.current === '4') {
+      fetchFieldPermissions(target, selectedFieldProgram);
+    }
+    if (activeTabKeyRef.current === '5') {
+      fetchConstraints(target, selectedConstraintProgram, selectedConstraintKeycol);
+    }
   };
 
   const handleSelectUser = (record) => {
@@ -987,6 +1191,38 @@ export default function Sy005Sheet() {
     );
   }, [groupsList, groupSearchText]);
 
+  const fieldPermissionTableColumns = [
+    {
+      title: '資料表欄位',
+      dataIndex: 'db_name',
+      width: 150,
+      render: (text) => <code>{text}</code>
+    },
+    {
+      title: '欄位說明 (標籤)',
+      dataIndex: 'label',
+    },
+    {
+      title: '權限設定',
+      width: 300,
+      render: (_, record) => {
+        const currentSetting = fieldPermissions.find(p => p.db_name === record.db_name)?.kind || 'none';
+        return (
+          <Select
+            value={currentSetting}
+            onChange={(val) => handleFieldPermissionChange(record.db_name, val)}
+            style={{ width: '100%' }}
+            disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+          >
+            <Select.Option value="none">無限制 (預設)</Select.Option>
+            <Select.Option value="readonly">唯讀 (Readonly)</Select.Option>
+            <Select.Option value="hide">隱藏 (Hide)</Select.Option>
+          </Select>
+        );
+      }
+    }
+  ];
+
   return (
     <ERPSheetPage
       sheetId="sy005"
@@ -1276,16 +1512,185 @@ export default function Sy005Sheet() {
             )}
           </Tabs.TabPane>
 
-          <Tabs.TabPane tab="🔒 資料約束設定" key="4">
-            <Alert
-              message="資料約束設定 (Row-Level Security) 規劃中"
-              description="此頁籤對應 PB 的 Constraint 約束設定（公司資料、品牌限制等）。相關後端權限引擎與 UI 設置將於後續 C4 階段實作開發。"
-              type="info"
-              showIcon
-            />
+          <Tabs.TabPane tab="🛡️ 欄位權限設定" key="4">
+            {selectedTarget && !selectedTarget.is_group ? (
+              <div style={{ background: '#fff', padding: 24, borderRadius: 8 }}>
+                <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+                  <Col>
+                    <Space size="large">
+                      <div>
+                        <strong>目前設定對象：</strong>
+                        <Tag color="blue">{selectedTarget.label}</Tag>
+                      </div>
+                      <div>
+                        <strong>指定作業名稱：</strong>
+                        <Select 
+                          value={selectedFieldProgram} 
+                          onChange={(val) => {
+                            setSelectedFieldProgram(val);
+                            fetchFieldPermissions(selectedTarget, val);
+                          }} 
+                          style={{ width: 200 }}
+                        >
+                          <Select.Option value="w_dp030">樣品單作業 (w_dp030)</Select.Option>
+                        </Select>
+                      </div>
+                    </Space>
+                  </Col>
+                  <Col>
+                    <Space>
+                      <Button icon={<ReloadOutlined />} onClick={() => fetchFieldPermissions()}>
+                        重新載入
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        icon={<SaveOutlined />} 
+                        onClick={handleSaveFieldPermissions}
+                        disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                      >
+                        儲存欄位權限
+                      </Button>
+                    </Space>
+                  </Col>
+                </Row>
+                <Table 
+                  dataSource={FIELD_PERMISSION_FALLBACK_COLUMNS[selectedFieldProgram] || []}
+                  columns={fieldPermissionTableColumns}
+                  rowKey="db_name"
+                  pagination={false}
+                  loading={loadingFieldPermissions}
+                  bordered
+                  size="small"
+                />
+              </div>
+            ) : (
+              <div style={{ padding: '80px 0', textAlign: 'center' }}>
+                <Empty description="請先在「使用者帳號維護」中選取一個使用者，本功能不支援群組級別欄位權限。" />
+              </div>
+            )}
           </Tabs.TabPane>
 
-          <Tabs.TabPane tab="📊 權限報表與對照" key="5">
+          <Tabs.TabPane tab="🔒 資料範圍權限設定" key="5">
+            {selectedTarget && !selectedTarget.is_group ? (
+              <div style={{ background: '#fff', padding: 24, borderRadius: 8 }}>
+                <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+                  <Col>
+                    <Space size="large">
+                      <div>
+                        <strong>目前設定對象：</strong>
+                        <Tag color="blue">{selectedTarget.label}</Tag>
+                      </div>
+                      <div>
+                        <strong>作業名稱：</strong>
+                        <Select 
+                          value={selectedConstraintProgram} 
+                          onChange={(val) => {
+                            setSelectedConstraintProgram(val);
+                            fetchConstraints(selectedTarget, val, selectedConstraintKeycol);
+                          }} 
+                          style={{ width: 200 }}
+                        >
+                          <Select.Option value="w_dp030">樣品單作業 (w_dp030)</Select.Option>
+                        </Select>
+                      </div>
+                      <div>
+                        <strong>限制欄位：</strong>
+                        <Select 
+                          value={selectedConstraintKeycol} 
+                          onChange={(val) => {
+                            setSelectedConstraintKeycol(val);
+                            fetchConstraints(selectedTarget, selectedConstraintProgram, val);
+                          }} 
+                          style={{ width: 150 }}
+                        >
+                          <Select.Option value="es101gkey">業務員 (es101gkey)</Select.Option>
+                        </Select>
+                      </div>
+                    </Space>
+                  </Col>
+                  <Col>
+                    <Space>
+                      <Button icon={<ReloadOutlined />} onClick={() => fetchConstraints()}>
+                        重新載入
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        icon={<SaveOutlined />} 
+                        onClick={handleSaveConstraints}
+                        disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                      >
+                        儲存資料範圍權限
+                      </Button>
+                    </Space>
+                  </Col>
+                </Row>
+                <div style={{ marginBottom: 16 }}>
+                  <Alert
+                    message="安全提示"
+                    description="若允許值清單為空並儲存，代表解除此帳號在此作業的資料範圍限制，該帳號將可看到此作業的全部資料。"
+                    type="info"
+                    showIcon
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <Space>
+                    <strong>新增允許值：</strong>
+                    <Select
+                      showSearch
+                      placeholder="搜尋員工並新增"
+                      optionFilterProp="children"
+                      loading={loadingEs101Options}
+                      style={{ width: 300 }}
+                      onChange={(val, option) => {
+                        handleAddConstraintValue(val, option.cname);
+                      }}
+                      disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                    >
+                      {es101Options.map(opt => (
+                        <Select.Option key={opt.value} value={opt.value} cname={opt.cname}>
+                          {opt.label}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Space>
+                </div>
+                <Table 
+                  dataSource={constraintValues}
+                  columns={[
+                    { title: '業務員 GKEY', dataIndex: 'cgkey', width: 250, render: t => <code>{t}</code> },
+                    { title: '顯示名稱', dataIndex: 'cname' },
+                    { 
+                      title: '操作', 
+                      width: 100,
+                      render: (_, record) => (
+                        <Button 
+                          type="text" 
+                          danger 
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleRemoveConstraintValue(record.cgkey)}
+                          disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                        >
+                          移除
+                        </Button>
+                      )
+                    }
+                  ]}
+                  rowKey="cgkey"
+                  pagination={false}
+                  loading={loadingConstraint}
+                  bordered
+                  size="small"
+                  locale={{ emptyText: '目前沒有任何允許值（將不受此欄位限制）' }}
+                />
+              </div>
+            ) : (
+              <div style={{ padding: '80px 0', textAlign: 'center' }}>
+                <Empty description="請先在「使用者帳號維護」中選取一個使用者，本功能不支援群組級別資料範圍權限。" />
+              </div>
+            )}
+          </Tabs.TabPane>
+
+          <Tabs.TabPane tab="📊 權限報表與對照" key="6">
             <Alert
               message="權限報表對照與列印規劃中"
               description="本模組支援跨帳號/作業的權限對照分析與報表印製，將於後續 Phase 完成 PDF / Excel 完整輸出引擎後整合推出。"
