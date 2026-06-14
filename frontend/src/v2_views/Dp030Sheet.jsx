@@ -6,11 +6,14 @@ import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import createRecordWorkbenchSheet from '../components/erp/factory/createRecordWorkbenchSheet';
 import ERPLookupField from '../components/erp/lookup/ERPLookupField';
+import { useAuth } from '../auth/useAuth';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
 
 const Dp030Context = React.createContext(null);
+
+import GuardedField from '../components/erp/auth/GuardedField';
 
 function Dp030FormCapturer({ form, updateMasterField }) {
   const contextRef = React.useContext(Dp030Context);
@@ -1637,18 +1640,20 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
               <Checkbox>收費</Checkbox>
             </Form.Item>
           </Col>
-          <Col span={2} style={{ display: 'flex', alignItems: 'center', paddingTop: 10 }}>
-            <Form.Item
-              name="cost"
-              valuePropName="checked"
-              getValueProps={(value) => ({ checked: value === 'Y' })}
-              normalize={(value) => (value ? 'Y' : 'N')}
-              tooltip="Cost"
-              style={{ margin: 0 }}
-            >
-              <Checkbox>核成本</Checkbox>
-            </Form.Item>
-          </Col>
+          <GuardedField fieldName="cost">
+            <Col span={2} style={{ display: 'flex', alignItems: 'center', paddingTop: 10 }}>
+              <Form.Item
+                name="cost"
+                valuePropName="checked"
+                getValueProps={(value) => ({ checked: value === 'Y' })}
+                normalize={(value) => (value ? 'Y' : 'N')}
+                tooltip="Cost"
+                style={{ margin: 0 }}
+              >
+                <Checkbox>核成本</Checkbox>
+              </Form.Item>
+            </Col>
+          </GuardedField>
           <Col span={4}>
             <Form.Item name="aba060gkey" label="結算幣別" tooltip="Currency">
               <ERPLookupField
@@ -1676,11 +1681,13 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
               <Input type="number" placeholder="0.00" />
             </Form.Item>
           </Col>
-          <Col span={3}>
-            <Form.Item name="profit" label="目標利潤" tooltip="Profit%">
-              <Input type="number" placeholder="0.00" />
-            </Form.Item>
-          </Col>
+          <GuardedField fieldName="profit">
+            <Col span={3}>
+              <Form.Item name="profit" label="目標利潤" tooltip="Profit%">
+                <Input type="number" placeholder="0.00" />
+              </Form.Item>
+            </Col>
+          </GuardedField>
         </Row>
 
         {/* Hidden fields to preserve remark and revisememo in form store */}
@@ -1693,8 +1700,9 @@ const RawDp030Sheet = createRecordWorkbenchSheet({
 
 export default function Dp030Sheet(props) {
   const contextRef = React.useRef({ form: null, updateMasterField: null });
+  const { fieldPermissions } = useAuth();
   return (
-    <Dp030Context.Provider value={contextRef}>
+    <Dp030Context.Provider value={Object.assign(contextRef, { fieldPermissions })}>
       <RawDp030Sheet {...props} />
     </Dp030Context.Provider>
   );

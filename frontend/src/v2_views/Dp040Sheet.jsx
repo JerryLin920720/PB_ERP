@@ -8,6 +8,7 @@ import Dp040SampleTab from './dp040/Dp040SampleTab';
 import Dp040PackingTab from './dp040/Dp040PackingTab';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import GuardedField from '../components/erp/auth/GuardedField';
 
 // Dp040 (Invoice Master) workbench definition
 export default createRecordWorkbenchSheet({
@@ -632,9 +633,11 @@ function Dp040MasterForm({ form, isEditing, updateMasterField, activeRecord, det
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item name="amount" label="總金額">
-                <InputNumber disabled style={{ width: '100%' }} placeholder="0.00" precision={2} />
-              </Form.Item>
+              <GuardedField sheetId="dp040" fieldName="amount">
+                <Form.Item name="amount" label="總金額">
+                  <InputNumber disabled style={{ width: '100%' }} placeholder="0.00" precision={2} />
+                </Form.Item>
+              </GuardedField>
             </Col>
             <Col span={12}>
               <Form.Item name="regards" label="問候語 / Regards">
@@ -650,9 +653,11 @@ function Dp040MasterForm({ form, isEditing, updateMasterField, activeRecord, det
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="remark" label="備註">
-                <Input.TextArea rows={3} maxLength={500} placeholder="備註" />
-              </Form.Item>
+              <GuardedField sheetId="dp040" fieldName="remark">
+                <Form.Item name="remark" label="備註">
+                  <Input.TextArea rows={3} maxLength={500} placeholder="備註" />
+                </Form.Item>
+              </GuardedField>
             </Col>
           </Row>
         </Col>

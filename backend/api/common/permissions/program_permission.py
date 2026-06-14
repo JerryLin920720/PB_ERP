@@ -74,8 +74,8 @@ class HasProgramPermission(BasePermission):
         if not action:
             return False
 
-        # Phase 9A-2B-Fix: Strict Allowlist 控制
-        STRICT_PERMISSION_PROGRAMS = {'w_dp030'}
+        # Phase 9A-2B-Fix:        # TODO: 將 allowlist 移至 settings
+        STRICT_PERMISSION_PROGRAMS = {'w_dp030', 'w_dp040'}
         is_strict = program_id in STRICT_PERMISSION_PROGRAMS
 
         # 8. 針對特例進行多動作檢測 (例如 deep_save 允許 new 或 edit 任一權限通過)

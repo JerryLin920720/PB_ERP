@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Strict Allowlist：只有此集合中的 program_id 才啟用嚴格動態 DB 讀取 constraint
 # Phase 9A-2B 只允許 w_dp030
 # ============================================================
-STRICT_CONSTRAINT_PROGRAMS = {'w_dp030'}
+STRICT_CONSTRAINT_PROGRAMS = {'w_dp030', 'w_dp040'}
 
 
 def _get_db_constraints(accounts_id: str, program_id: str) -> list:

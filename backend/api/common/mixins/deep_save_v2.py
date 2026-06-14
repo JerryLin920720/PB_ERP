@@ -55,8 +55,8 @@ class DeepSaveMixinV2:
         from core.authz.services import has_program_permission
         account = getattr(request.user, 'sys_account', None)
         program_id = getattr(self, 'program_id', None)
-        # Import STRICT_PERMISSION_PROGRAMS or define locally
-        STRICT_PERMISSION_PROGRAMS = {'w_dp030'}
+        # Import STRICT_PERMISSION_PROGRAMS        # TODO: 將 allowlist 抽離到 settings
+        STRICT_PERMISSION_PROGRAMS = {'w_dp030', 'w_dp040'}
         
         if program_id and account and program_id in STRICT_PERMISSION_PROGRAMS:
             is_update = bool(master_pk_val and not str(master_pk_val).startswith('temp_'))
@@ -205,7 +205,7 @@ class DeepSaveMixinV2:
         if pk_val and not str(pk_val).startswith('temp_'):
             instance = model_class.objects.filter(**{pk_field: pk_val}).first()
             if instance:
-                serializer = serializer_class(instance, data=master_data, partial=True)
+                serializer = serializer_class(instance, data=master_data, partial=True, context={'request': self.request})
                 serializer.is_valid(raise_exception=True)
                 # Audit 欄位維護
                 if hasattr(instance, 'modifyuser'):
@@ -217,7 +217,7 @@ class DeepSaveMixinV2:
                 return instance, False
         
         # Otherwise, create
-        serializer = serializer_class(data=master_data)
+        serializer = serializer_class(data=master_data, context={'request': self.request})
         serializer.is_valid(raise_exception=True)
         # Audit 欄位維護
         mock_instance = model_class()
@@ -250,7 +250,7 @@ class DeepSaveMixinV2:
             if pk_val and not str(pk_val).startswith('temp_'):
                 instance = model_class.objects.filter(**{pk_field: pk_val}).first()
                 if instance:
-                    serializer = serializer_class(instance, data=ser_data, partial=True)
+                    serializer = serializer_class(instance, data=ser_data, partial=True, context={'request': self.request})
                     serializer.is_valid(raise_exception=True)
                     serializer.save()
                     results.append({"_tempId": row.get('_tempId'), pk_field: getattr(instance, pk_field), "action": "update", "instance": instance, "raw_row": row})
@@ -258,7 +258,7 @@ class DeepSaveMixinV2:
                     continue
             
             # Create
-            serializer = serializer_class(data=ser_data)
+            serializer = serializer_class(data=ser_data, context={'request': self.request})
             serializer.is_valid(raise_exception=True)
             instance = serializer.save()
             new_pk_val = getattr(instance, pk_field)

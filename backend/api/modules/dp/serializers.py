@@ -156,6 +156,7 @@ class Dp014Serializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {'gkey': {'required': False}, 'serialno': {'required': False}}
 
+
 class Dp023Serializer(serializers.ModelSerializer):
     lastno = serializers.ReadOnlyField(source='dp010gkey.lastno')
     bottomno = serializers.ReadOnlyField(source='dp015gkey.bottomno')
@@ -400,7 +401,8 @@ class Dp030Serializer(FieldLevelPermissionMixin, serializers.ModelSerializer):
 
 
 
-class Dp040Serializer(serializers.ModelSerializer):
+class Dp040Serializer(FieldLevelPermissionMixin, serializers.ModelSerializer):
+    field_permission_obj_name = 'w_dp040'
     ba010_shortname = serializers.ReadOnlyField(source='ba010gkey.shortname')
     maker_name = serializers.ReadOnlyField(source='es101gkey.englishname')
     approver_name = serializers.ReadOnlyField(source='aes101gkey.englishname')

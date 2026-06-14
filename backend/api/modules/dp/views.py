@@ -1200,7 +1200,7 @@ class Dp030ViewSet(DeepSaveMixinV2, BillNoMixin, ApprovalMixin, BaseDictionaryVi
         except Exception as e:
             return Response({'detail': f'讀取樣品 Label 資料失敗: {str(e)}'}, status=400)
 
-    @action(detail=False, methods=['post'], url_path='legacy_deep_save')
+    # @action(detail=False, methods=['post'], url_path='legacy_deep_save')
     def legacy_deep_save(self, request):
         """
         🚀 神經中樞級：深度原子儲存引擎 (Full Cascade Atomic Update)
@@ -1882,6 +1882,11 @@ class Dp040ViewSet(DeepSaveMixinV2, ValidationMixin, BillNoMixin, ApprovalMixin,
     }
 
     def pre_deep_save_hook(self, master_data, details_data, request):
+        from api.common.filters.data_constraint import DataConstraintFilterBackend
+        constraint_backend = DataConstraintFilterBackend()
+        if master_data:
+            constraint_backend.check_payload_constraint(request, master_data, self)
+        
         self._touched_dp033_keys = set()
         
         # 處理 deleted41 字串陣列轉換與蒐集 affected dp033 keys
@@ -2105,7 +2110,7 @@ class Dp040ViewSet(DeepSaveMixinV2, ValidationMixin, BillNoMixin, ApprovalMixin,
         return Response(candidates[:limit])
 
 
-    @action(detail=False, methods=['post'], url_path='legacy_deep_save')
+    # @action(detail=False, methods=['post'], url_path='legacy_deep_save')
     def legacy_deep_save(self, request):
         self.check_deep_save_validation(request)
         master_data = request.data.get('master', {})
@@ -2234,6 +2239,7 @@ class Dp040ViewSet(DeepSaveMixinV2, ValidationMixin, BillNoMixin, ApprovalMixin,
 
 
 class Dp041ViewSet(BaseDictionaryViewSet):
+    http_method_names = ['get', 'head', 'options']
     """樣品出貨明細 ViewSet (明細：隸屬樣品出貨單管理)"""
     program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp041.objects.all()
@@ -2249,6 +2255,7 @@ class Dp041ViewSet(BaseDictionaryViewSet):
 
 
 class Dp042ViewSet(BaseDictionaryViewSet):
+    http_method_names = ['get', 'head', 'options']
     """樣品出貨重量規格 ViewSet (明細：隸屬樣品出貨單管理)"""
     program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp042.objects.all()
@@ -2264,6 +2271,7 @@ class Dp042ViewSet(BaseDictionaryViewSet):
 
 
 class Dp043ViewSet(BaseDictionaryViewSet):
+    http_method_names = ['get', 'head', 'options']
     """樣品出貨裝箱 ViewSet (明細：隸屬樣品出貨單管理)"""
     program_id = 'w_dp040'  # 明細：隸屬 Dp040 樣品出貨主檔作業
     queryset = Dp043.objects.all()

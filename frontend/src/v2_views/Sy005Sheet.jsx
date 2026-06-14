@@ -191,7 +191,7 @@ export default function Sy005Sheet() {
     if (!selectedTarget || selectedTarget.is_group) return;
 
     // Enforce w_sy005 edit permission guard
-    if (!canExecuteCommand('w_sy005', 'edit', permissions)) {
+    if (!canExecuteCommand(permissions, 'sy005', 'edit', user)) {
       message.error('您沒有權限修改欄位權限設定');
       return;
     }
@@ -279,7 +279,7 @@ export default function Sy005Sheet() {
   const handleSaveConstraints = async () => {
     if (!selectedTarget || selectedTarget.is_group) return;
 
-    if (!canExecuteCommand('w_sy005', 'edit', permissions)) {
+    if (!canExecuteCommand(permissions, 'sy005', 'edit', user)) {
       message.error('您沒有權限修改資料範圍約束設定');
       return;
     }
@@ -1212,7 +1212,7 @@ export default function Sy005Sheet() {
             value={currentSetting}
             onChange={(val) => handleFieldPermissionChange(record.db_name, val)}
             style={{ width: '100%' }}
-            disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+            disabled={!canExecuteCommand(permissions, 'sy005', 'edit', user)}
           >
             <Select.Option value="none">無限制 (預設)</Select.Option>
             <Select.Option value="readonly">唯讀 (Readonly)</Select.Option>
@@ -1546,7 +1546,7 @@ export default function Sy005Sheet() {
                         type="primary" 
                         icon={<SaveOutlined />} 
                         onClick={handleSaveFieldPermissions}
-                        disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                        disabled={!canExecuteCommand(permissions, 'sy005', 'edit', user)}
                       >
                         儲存欄位權限
                       </Button>
@@ -1617,7 +1617,7 @@ export default function Sy005Sheet() {
                         type="primary" 
                         icon={<SaveOutlined />} 
                         onClick={handleSaveConstraints}
-                        disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                        disabled={!canExecuteCommand(permissions, 'sy005', 'edit', user)}
                       >
                         儲存資料範圍權限
                       </Button>
@@ -1644,7 +1644,7 @@ export default function Sy005Sheet() {
                       onChange={(val, option) => {
                         handleAddConstraintValue(val, option.cname);
                       }}
-                      disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                      disabled={!canExecuteCommand(permissions, 'sy005', 'edit', user)}
                     >
                       {es101Options.map(opt => (
                         <Select.Option key={opt.value} value={opt.value} cname={opt.cname}>
@@ -1668,7 +1668,7 @@ export default function Sy005Sheet() {
                           danger 
                           icon={<DeleteOutlined />}
                           onClick={() => handleRemoveConstraintValue(record.cgkey)}
-                          disabled={!canExecuteCommand('w_sy005', 'edit', permissions)}
+                          disabled={!canExecuteCommand(permissions, 'sy005', 'edit', user)}
                         >
                           移除
                         </Button>
